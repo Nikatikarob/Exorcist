@@ -35,6 +35,11 @@
             </intent-filter>
         </activity>
 
+            <!-- EMF-гид -->
+        <activity
+            android:name=".ui.EMFGuideActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Exorcist" />
     </application>
 
 </manifest>
