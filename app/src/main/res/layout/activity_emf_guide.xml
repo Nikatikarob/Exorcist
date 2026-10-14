@@ -5,7 +5,6 @@
     android:layout_height="match_parent"
     android:background="@color/bg_dark">
 
-    <!-- Заголовок -->
     <TextView
         android:id="@+id/tvTitle"
         android:layout_width="wrap_content"
@@ -21,7 +20,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-    <!-- Подпись -->
     <TextView
         android:id="@+id/tvSubtitle"
         android:layout_width="wrap_content"
@@ -35,7 +33,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvTitle" />
 
-    <!-- Большое значение -->
     <TextView
         android:id="@+id/tvValue"
         android:layout_width="wrap_content"
@@ -50,7 +47,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvSubtitle" />
 
-    <!-- Единица измерения -->
     <TextView
         android:id="@+id/tvUnit"
         android:layout_width="wrap_content"
@@ -64,7 +60,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvValue" />
 
-    <!-- Статус -->
     <TextView
         android:id="@+id/tvStatus"
         android:layout_width="wrap_content"
@@ -80,7 +75,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvUnit" />
 
-    <!-- Полоса прогресса -->
     <ProgressBar
         android:id="@+id/progressBar"
         style="?android:attr/progressBarStyleHorizontal"
@@ -97,7 +91,6 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/tvStatus" />
 
-    <!-- Шкала -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -109,63 +102,13 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/progressBar">
 
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="0"
-            android:textColor="@color/text_dim"
-            android:textSize="10sp"
-            android:fontFamily="monospace"
-            android:gravity="start" />
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="50"
-            android:textColor="@color/text_dim"
-            android:textSize="10sp"
-            android:fontFamily="monospace"
-            android:gravity="center" />
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="100"
-            android:textColor="@color/text_dim"
-            android:textSize="10sp"
-            android:fontFamily="monospace"
-            android:gravity="center" />
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="200+"
-            android:textColor="@color/text_dim"
-            android:textSize="10sp"
-            android:fontFamily="monospace"
-            android:gravity="end" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="0" android:textColor="@color/text_dim" android:textSize="10sp" android:fontFamily="monospace" android:gravity="start" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="50" android:textColor="@color/text_dim" android:textSize="10sp" android:fontFamily="monospace" android:gravity="center" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="100" android:textColor="@color/text_dim" android:textSize="10sp" android:fontFamily="monospace" android:gravity="center" />
+        <TextView android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:text="200+" android:textColor="@color/text_dim" android:textSize="10sp" android:fontFamily="monospace" android:gravity="end" />
     </LinearLayout>
 
-    <!-- Кнопка калибровки -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnCalibrate"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="32dp"
-        android:text="КАЛИБРОВАТЬ"
-        android:textColor="@color/neon_yellow"
-        android:fontFamily="monospace"
-        app:strokeColor="@color/neon_yellow"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
-
-    <!-- Кнопка назад -->
+    <!-- ИСПРАВЛЕННЫЕ КНОПКИ -->
     <com.google.android.material.button.MaterialButton
         android:id="@+id/btnBack"
         style="@style/Widget.MaterialComponents.Button.TextButton"
@@ -176,6 +119,20 @@
         android:textColor="@color/text_dim"
         android:fontFamily="monospace"
         app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent" />
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnCalibrate"
+        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="КАЛИБРОВАТЬ"
+        android:textColor="@color/neon_yellow"
+        android:fontFamily="monospace"
+        app:strokeColor="@color/neon_yellow"
+        app:layout_constraintBottom_toTopOf="@id/btnBack"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent" />
 
