@@ -1,9 +1,11 @@
 package com.exorcist.app
 
+import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.exorcist.app.databinding.ActivityMainBinding
+import com.exorcist.app.ui.EMFGuideActivity
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,7 +33,8 @@ class MainActivity : AppCompatActivity() {
         }
         
         binding.btnEMF.setOnClickListener { 
-            showToast("EMF-Гид: В разработке")
+            // Открываем EMF-Гид
+            startActivity(Intent(this, EMFGuideActivity::class.java))
         }
         
         binding.btnAnomaly.setOnClickListener { 
