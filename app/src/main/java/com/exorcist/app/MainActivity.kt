@@ -6,6 +6,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.exorcist.app.databinding.ActivityMainBinding
 import com.exorcist.app.ui.EMFGuideActivity
+import com.exorcist.app.ui.ARScannerActivity
 
 class MainActivity : AppCompatActivity() {
 
@@ -21,7 +22,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupButtons() {
         binding.btnAR.setOnClickListener {
-            showToast("AR-Сканер: В разработке")
+            // Открываем AR-сканер
+            startActivity(Intent(this, ARScannerActivity::class.java))
         }
         
         binding.btnMap.setOnClickListener { 
