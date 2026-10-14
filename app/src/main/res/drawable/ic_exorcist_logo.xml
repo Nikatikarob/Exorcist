@@ -4,12 +4,11 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     
-    <!-- Внешний магический круг (пунктир, бирюзовый) -->
+    <!-- Внешний магический круг (сплошной, бирюзовый) -->
     <path
         android:pathData="M54,54m-48,0a48,48 0,1 1,96 0a48,48 0,1 1,-96 0"
         android:strokeWidth="1.5"
         android:strokeColor="#00F5D4"
-        android:strokeDashArray="4 4"
         android:fillColor="#00000000"/>
         
     <!-- Средний круг (сплошной, фиолетовый) -->
