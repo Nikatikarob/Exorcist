@@ -35,11 +35,18 @@
             </intent-filter>
         </activity>
 
-            <!-- EMF-гид -->
+        <!-- EMF-гид -->
         <activity
             android:name=".ui.EMFGuideActivity"
             android:exported="false"
             android:theme="@style/Theme.Exorcist" />
+
+        <!-- AR-сканер -->
+        <activity
+            android:name=".ui.ARScannerActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Exorcist" />
+
     </application>
 
 </manifest>
