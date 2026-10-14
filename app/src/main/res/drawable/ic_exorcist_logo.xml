@@ -1,0 +1,47 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Внешний магический круг (пунктир, бирюзовый) -->
+    <path
+        android:pathData="M54,54m-48,0a48,48 0,1 1,96 0a48,48 0,1 1,-96 0"
+        android:strokeWidth="1.5"
+        android:strokeColor="#00F5D4"
+        android:strokeDashArray="4 4"
+        android:fillColor="#00000000"/>
+        
+    <!-- Средний круг (сплошной, фиолетовый) -->
+    <path
+        android:pathData="M54,54m-38,0a38,38 0,1 1,76 0a38,38 0,1 1,-76 0"
+        android:strokeWidth="0.5"
+        android:strokeColor="#9B5DE5"
+        android:fillColor="#00000000"/>
+
+    <!-- Внутренний прицел (розовый) -->
+    <path
+        android:pathData="M54,54m-20,0a20,20 0,1 1,40 0a20,20 0,1 1,-40 0"
+        android:strokeWidth="2"
+        android:strokeColor="#FF006E"
+        android:fillColor="#00000000"/>
+
+    <!-- Перекрестие / HUD линии (бирюзовый) -->
+    <path
+        android:pathData="M54,26 L54,34 M54,74 L54,82 M26,54 L34,54 M74,54 L82,54"
+        android:strokeWidth="1.5"
+        android:strokeColor="#00F5D4"/>
+
+    <!-- Центральный "глаз" / ядро (бирюзовый) -->
+    <path
+        android:pathData="M54,54m-6,0a6,6 0,1 1,12 0a6,6 0,1 1,-12 0"
+        android:fillColor="#00F5D4"/>
+        
+    <!-- Декоративные узлы (розовый) -->
+    <path
+        android:pathData="M54,6m2,0a2,2 0,1 1,-4 0a2,2 0,1 1,4 0"
+        android:fillColor="#FF006E"/>
+    <path
+        android:pathData="M54,100m2,0a2,2 0,1 1,-4 0a2,2 0,1 1,4 0"
+        android:fillColor="#FF006E"/>
+</vector>
