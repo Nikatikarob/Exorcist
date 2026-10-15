@@ -6,7 +6,7 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.exorcist.app.databinding.ActivityMainBinding
 import com.exorcist.app.ui.EMFGuideActivity
-import com.exorcist.app.ui.ARScannerActivity
+import com.exorcist.app.ui.RecorderActivity
 
 class MainActivity : AppCompatActivity() {
 
@@ -22,8 +22,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupButtons() {
         binding.btnAR.setOnClickListener {
-            // Открываем AR-сканер
-            startActivity(Intent(this, ARScannerActivity::class.java))
+            // Открываем Нейро-сканер (бывший AR)
+            startActivity(Intent(this, RecorderActivity::class.java))
         }
         
         binding.btnMap.setOnClickListener { 
@@ -35,7 +35,6 @@ class MainActivity : AppCompatActivity() {
         }
         
         binding.btnEMF.setOnClickListener { 
-            // Открываем EMF-Гид
             startActivity(Intent(this, EMFGuideActivity::class.java))
         }
         
