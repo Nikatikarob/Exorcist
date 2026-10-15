@@ -35,7 +35,12 @@ class RecorderActivity : AppCompatActivity() {
 
         // Инициализация
         sensorFusion = SensorFusion(this)
-        adapter = SessionAdapter()
+                adapter = SessionAdapter { session ->
+            // При клике открываем детализацию
+            val intent = android.content.Intent(this, SessionDetailActivity::class.java)
+            intent.putExtra("SESSION_ID", session.id)
+            startActivity(intent)
+        }
         binding.recyclerViewSessions.layoutManager = LinearLayoutManager(this)
         binding.recyclerViewSessions.adapter = adapter
 
