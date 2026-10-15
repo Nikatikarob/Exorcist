@@ -4,7 +4,8 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
-import kotlin.math.*
+import kotlin.math.max
+import kotlin.math.sqrt
 
 class SpatialTracker : SensorEventListener {
     
@@ -42,7 +43,7 @@ class SpatialTracker : SensorEventListener {
     // Порог для детекции шагов/движения
     private val movementThreshold = 0.5f
     
-    fun onSensorChanged(event: SensorEvent?) {
+    override fun onSensorChanged(event: SensorEvent?) {
         when (event?.sensor?.type) {
             Sensor.TYPE_ACCELEROMETER -> {
                 // Применяем фильтр низких частот для сглаживания
