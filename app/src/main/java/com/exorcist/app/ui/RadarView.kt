@@ -8,6 +8,7 @@ import android.util.AttributeSet
 import android.view.View
 import com.exorcist.app.data.SensorReading
 import kotlin.math.max
+import kotlin.math.min
 
 class RadarView @JvmOverloads constructor(
     context: Context,
@@ -33,7 +34,7 @@ class RadarView @JvmOverloads constructor(
         isAntiAlias = true
     }
 
-        override fun onDraw(canvas: Canvas) {
+    override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         
         try {
@@ -59,7 +60,7 @@ class RadarView @JvmOverloads constructor(
 
             val scaleX = (width - 2 * padding) / (maxX - minX)
             val scaleY = (height - 2 * padding) / (maxY - minY)
-            val scale = minOf(scaleX, scaleY)
+            val scale = min(scaleX, scaleY)
 
             val offsetX = (width - (maxX - minX) * scale) / 2 - minX * scale
             val offsetY = (height - (maxY - minY) * scale) / 2 - minY * scale
@@ -125,8 +126,10 @@ class RadarView @JvmOverloads constructor(
                 color = Color.WHITE 
                 style = Paint.Style.FILL 
             })
+            
         } catch (e: Exception) {
-            // Если что-то пошло не так, просто не рисуем ничего
+            // Если что-то пошло не так, просто не рисуем ничего, чтобы не крашить приложение
             e.printStackTrace()
         }
     }
+}
