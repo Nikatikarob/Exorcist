@@ -42,4 +42,12 @@ data class SensorReading(
     
     // Близость (см, 0 = что-то рядом)
     val proximity: Float = 0f
+    val posX: Double = 0.0,
+    val posY: Double = 0.0,
+    val posZ: Double = 0.0,
+    val azimuth: Double = 0.0,
+    val pitch: Double = 0.0,
+    val roll: Double = 0.0,
+    val anomalyStatus: String = "НОРМА",
+    val anomalyReason: String = ""
 )
