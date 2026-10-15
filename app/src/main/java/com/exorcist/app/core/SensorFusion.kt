@@ -26,6 +26,9 @@ class SensorFusion(private val context: Context) : SensorEventListener {
     
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     
+    // Пространственный трекер (3D-позиция и ориентация)
+    val spatialTracker = SpatialTracker()
+    
     // Датчики
     private val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -85,6 +88,9 @@ class SensorFusion(private val context: Context) : SensorEventListener {
             val session = SensorSession(locationName = locationName)
             currentSessionId = dao.insertSession(session)
             isRecording = true
+            
+            // Сбрасываем трекер позиции
+            spatialTracker.reset()
             
             // Регистрируем слушатели сенсоров
             magnetometer?.let { sensorManager.registerListener(this@SensorFusion, it, SensorManager.SENSOR_DELAY_NORMAL) }
@@ -155,7 +161,7 @@ class SensorFusion(private val context: Context) : SensorEventListener {
                     if (readSize > 0) {
                         analyzeAudio(buffer, readSize)
                     }
-                    delay(100) // Анализируем каждые 100 мс
+                    delay(100)
                 }
             }
         } catch (e: Exception) {
@@ -171,7 +177,6 @@ class SensorFusion(private val context: Context) : SensorEventListener {
     }
     
     private fun analyzeAudio(buffer: ShortArray, size: Int) {
-        // Простой анализ: находим максимальную амплитуду
         var maxAmplitude = 0.0
         for (i in 0 until size) {
             val amplitude = Math.abs(buffer[i].toDouble())
@@ -182,10 +187,8 @@ class SensorFusion(private val context: Context) : SensorEventListener {
         
         audioAmplitude = maxAmplitude.toFloat()
         
-        // Упрощённый анализ частоты (в реальности нужен FFT)
-        // Пока просто фиксируем, что есть звук
         if (maxAmplitude > 100) {
-            audioFrequency = 18000f // Заглушка: предполагаем ультразвук
+            audioFrequency = 18000f
         } else {
             audioFrequency = 0f
         }
@@ -193,7 +196,7 @@ class SensorFusion(private val context: Context) : SensorEventListener {
     
     private suspend fun saveLoop() {
         while (isRecording) {
-            delay(1000) // Сохраняем каждую секунду
+            delay(1000)
             
             val reading = SensorReading(
                 sessionId = currentSessionId,
@@ -209,17 +212,26 @@ class SensorFusion(private val context: Context) : SensorEventListener {
                 accelerationTotal = accelTotal,
                 pressure = pressure,
                 light = light,
-                proximity = proximity
+                proximity = proximity,
+                posX = spatialTracker.x,
+                posY = spatialTracker.y,
+                posZ = spatialTracker.z,
+                azimuth = spatialTracker.azimuth,
+                pitch = spatialTracker.pitch,
+                roll = spatialTracker.roll
             )
             
             dao.insertReading(reading)
-            _currentReading.value = reading
             
-            Log.d(TAG, "Saved reading: mag=${magneticTotal}, audio=${audioAmplitude}")
+            Log.d(TAG, "Saved reading: pos=(${spatialTracker.x}, ${spatialTracker.y}, ${spatialTracker.z}), mag=${magneticTotal}")
         }
     }
     
     override fun onSensorChanged(event: SensorEvent?) {
+        // Сначала передаём событие пространственному трекеру
+        spatialTracker.onSensorChanged(event)
+        
+        // Потом обрабатываем для сырых значений
         when (event?.sensor?.type) {
             Sensor.TYPE_MAGNETIC_FIELD -> {
                 magneticX = event.values[0]
@@ -243,6 +255,35 @@ class SensorFusion(private val context: Context) : SensorEventListener {
                 proximity = event.values[0]
             }
         }
+        
+        // Обновляем currentReading в реальном времени
+        updateCurrentReading()
+    }
+    
+    private fun updateCurrentReading() {
+        val reading = SensorReading(
+            sessionId = currentSessionId,
+            magneticX = magneticX,
+            magneticY = magneticY,
+            magneticZ = magneticZ,
+            magneticTotal = magneticTotal,
+            audioFrequency = audioFrequency,
+            audioAmplitude = audioAmplitude,
+            accelerationX = accelX,
+            accelerationY = accelY,
+            accelerationZ = accelZ,
+            accelerationTotal = accelTotal,
+            pressure = pressure,
+            light = light,
+            proximity = proximity,
+            posX = spatialTracker.x,
+            posY = spatialTracker.y,
+            posZ = spatialTracker.z,
+            azimuth = spatialTracker.azimuth,
+            pitch = spatialTracker.pitch,
+            roll = spatialTracker.roll
+        )
+        _currentReading.value = reading
     }
     
     override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
