@@ -12,7 +12,9 @@ import com.exorcist.app.data.SensorSession
 import java.text.SimpleDateFormat
 import java.util.Locale
 
-class SessionAdapter : ListAdapter<SensorSession, SessionAdapter.SessionViewHolder>(SessionDiffCallback()) {
+class SessionAdapter(
+    private val onItemClick: (SensorSession) -> Unit
+) : ListAdapter<SensorSession, SessionAdapter.SessionViewHolder>(SessionDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): SessionViewHolder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_session, parent, false)
@@ -21,6 +23,9 @@ class SessionAdapter : ListAdapter<SensorSession, SessionAdapter.SessionViewHold
 
     override fun onBindViewHolder(holder: SessionViewHolder, position: Int) {
         holder.bind(getItem(position))
+        holder.itemView.setOnClickListener {
+            onItemClick(getItem(position))
+        }
     }
 
     class SessionViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
