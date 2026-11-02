@@ -1,8 +1,13 @@
 package com.exorcist.app.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
@@ -22,10 +27,12 @@ class RecorderActivity : AppCompatActivity() {
     private lateinit var binding: ActivityRecorderBinding
     private lateinit var sensorFusion: SensorFusion
     private lateinit var adapter: SessionAdapter
+    private var vibrator: Vibrator? = null
     
     private var isRecording = false
     private val liveReadings = mutableListOf<SensorReading>()
-    private val maxLiveReadings = 300 // Ограничиваем количество точек на радаре для производительности
+    private val maxLiveReadings = 300
+    private var lastVibrationTime = 0L
 
     companion object {
         private const val AUDIO_PERMISSION_CODE = 101
@@ -36,9 +43,17 @@ class RecorderActivity : AppCompatActivity() {
         binding = ActivityRecorderBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        // Инициализация вибратора
+        vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            vibratorManager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
+
         sensorFusion = SensorFusion(this)
         
-        // Адаптер с кликом для открытия детализации
         adapter = SessionAdapter { session ->
             val intent = android.content.Intent(this, SessionDetailActivity::class.java)
             intent.putExtra("SESSION_ID", session.id)
@@ -48,32 +63,52 @@ class RecorderActivity : AppCompatActivity() {
         binding.recyclerViewSessions.layoutManager = LinearLayoutManager(this)
         binding.recyclerViewSessions.adapter = adapter
 
-        // 1. Наблюдаем за историей сессий в реальном времени
         lifecycleScope.launch {
             AppDatabase.getInstance(this@RecorderActivity).sensorDao().getAllSessions().collectLatest { sessions ->
                 adapter.submitList(sessions)
             }
         }
 
-                // 2. Live-радар: обновляем в реальном времени ВСЕ данные (не только аномалии)
+        // Live-радар + вибрация
         lifecycleScope.launch {
             sensorFusion.currentReading.collectLatest { reading ->
                 if (reading != null && isRecording) {
-                    // Добавляем все чтения для плавности
                     liveReadings.add(reading)
                     
-                    // Оставляем только последние 300 записей для производительности
                     if (liveReadings.size > maxLiveReadings) {
                         liveReadings.removeAt(0)
                     }
                     
-                    // Обновляем радар КАЖДУЮ секунду (для пульсации)
-                    binding.liveRadar.readings = liveReadings.toList()
+                    // Вычисляем силу сигнала для индикатора
+                    val hasCorrelation = reading.anomalyStatus.contains("АНОМАЛИЯ")
+                    val hasAnomaly = reading.anomalyStatus.contains("ВНИМАНИЕ") || hasCorrelation
+                    
+                    if (hasAnomaly) {
+                        val strength = when {
+                            hasCorrelation -> 0.9f
+                            reading.anomalyStatus.contains("ВНИМАНИЕ") -> 0.5f
+                            else -> 0.2f
+                        }
+                        
+                        // Обновляем индикатор
+                        runOnUiThread {
+                            binding.liveRadar.signalStrength = strength
+                            binding.liveRadar.readings = liveReadings.toList()
+                        }
+                        
+                        // Вибрация при корреляции (не чаще раза в 2 секунды)
+                        if (hasCorrelation) {
+                            val currentTime = System.currentTimeMillis()
+                            if (currentTime - lastVibrationTime > 2000) {
+                                vibrate()
+                                lastVibrationTime = currentTime
+                            }
+                        }
+                    }
                 }
             }
         }
 
-        // 3. Кнопка записи
         binding.btnRecord.setOnClickListener {
             if (checkAudioPermission()) {
                 toggleRecording()
@@ -82,9 +117,17 @@ class RecorderActivity : AppCompatActivity() {
             }
         }
 
-        // 4. Кнопка назад
         binding.btnBack.setOnClickListener {
             finish()
+        }
+    }
+
+    private fun vibrate() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            vibrator?.vibrate(VibrationEffect.createOneShot(200, VibrationEffect.DEFAULT_AMPLITUDE))
+        } else {
+            @Suppress("DEPRECATION")
+            vibrator?.vibrate(200)
         }
     }
 
@@ -102,16 +145,16 @@ class RecorderActivity : AppCompatActivity() {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 toggleRecording()
             } else {
-                Toast.makeText(this, "Нужен доступ к микрофону для анализа ультразвука", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Нужен доступ к микрофону", Toast.LENGTH_LONG).show()
             }
         }
     }
 
     private fun toggleRecording() {
         if (!isRecording) {
-            // Начинаем запись
             liveReadings.clear()
             binding.liveRadar.readings = emptyList()
+            binding.liveRadar.signalStrength = 0f
             
             sensorFusion.startRecording("Комната")
             isRecording = true
@@ -123,7 +166,6 @@ class RecorderActivity : AppCompatActivity() {
             binding.tvStatus.text = "СКАНИРОВАНИЕ... (КАЛИБРОВКА 15 сек)"
             binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.neon_cyan))
         } else {
-            // Останавливаем запись
             sensorFusion.stopRecording()
             isRecording = false
             
