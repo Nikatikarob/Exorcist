@@ -28,6 +28,7 @@ class SensorFusion(private val context: Context) : SensorEventListener {
     
     // Пространственный трекер (3D-позиция и ориентация)
     val spatialTracker = SpatialTracker()
+    val anomalyDetector = AnomalyDetector()
     
     // Датчики
     private val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
@@ -91,6 +92,7 @@ class SensorFusion(private val context: Context) : SensorEventListener {
             
             // Сбрасываем трекер позиции
             spatialTracker.reset()
+            anomalyDetector.reset()
             
             // Регистрируем слушатели сенсоров
             magnetometer?.let { sensorManager.registerListener(this@SensorFusion, it, SensorManager.SENSOR_DELAY_NORMAL) }
@@ -198,28 +200,32 @@ class SensorFusion(private val context: Context) : SensorEventListener {
         while (isRecording) {
             delay(1000)
             
-            val reading = SensorReading(
-                sessionId = currentSessionId,
-                magneticX = magneticX,
-                magneticY = magneticY,
-                magneticZ = magneticZ,
-                magneticTotal = magneticTotal,
-                audioFrequency = audioFrequency,
-                audioAmplitude = audioAmplitude,
-                accelerationX = accelX,
-                accelerationY = accelY,
-                accelerationZ = accelZ,
-                accelerationTotal = accelTotal,
-                pressure = pressure,
-                light = light,
-                proximity = proximity,
-                posX = spatialTracker.x,
-                posY = spatialTracker.y,
-                posZ = spatialTracker.z,
-                azimuth = spatialTracker.azimuth,
-                pitch = spatialTracker.pitch,
-                roll = spatialTracker.roll
-            )
+            val detection = anomalyDetector.analyze(magneticTotal, audioAmplitude)
+
+val reading = SensorReading(
+    sessionId = currentSessionId,
+    magneticX = magneticX,
+    magneticY = magneticY,
+    magneticZ = magneticZ,
+    magneticTotal = magneticTotal,
+    audioFrequency = audioFrequency,
+    audioAmplitude = audioAmplitude,
+    accelerationX = accelX,
+    accelerationY = accelY,
+    accelerationZ = accelZ,
+    accelerationTotal = accelTotal,
+    pressure = pressure,
+    light = light,
+    proximity = proximity,
+    posX = spatialTracker.x,
+    posY = spatialTracker.y,
+    posZ = spatialTracker.z,
+    azimuth = spatialTracker.azimuth,
+    pitch = spatialTracker.pitch,
+    roll = spatialTracker.roll,
+    anomalyStatus = detection.severity,
+    anomalyReason = detection.reason
+)
             
             dao.insertReading(reading)
             
