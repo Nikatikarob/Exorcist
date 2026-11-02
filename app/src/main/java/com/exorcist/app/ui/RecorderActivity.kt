@@ -55,25 +55,20 @@ class RecorderActivity : AppCompatActivity() {
             }
         }
 
-        // 2. Live-радар: подписываемся на показания в реальном времени
+                // 2. Live-радар: обновляем в реальном времени ВСЕ данные (не только аномалии)
         lifecycleScope.launch {
             sensorFusion.currentReading.collectLatest { reading ->
                 if (reading != null && isRecording) {
-                    // Проверяем, зафиксировал ли ИИ аномалию
-                    val hasAnomaly = reading.anomalyStatus.contains("ВНИМАНИЕ") || 
-                                     reading.anomalyStatus.contains("АНОМАЛИЯ")
+                    // Добавляем все чтения для плавности
+                    liveReadings.add(reading)
                     
-                    if (hasAnomaly) {
-                        liveReadings.add(reading)
-                        
-                        // Ограничиваем количество точек, чтобы не перегружать память и отрисовку
-                        if (liveReadings.size > maxLiveReadings) {
-                            liveReadings.removeAt(0)
-                        }
-                        
-                        // Обновляем радар
-                        binding.liveRadar.readings = liveReadings.toList()
+                    // Оставляем только последние 300 записей для производительности
+                    if (liveReadings.size > maxLiveReadings) {
+                        liveReadings.removeAt(0)
                     }
+                    
+                    // Обновляем радар КАЖДУЮ секунду (для пульсации)
+                    binding.liveRadar.readings = liveReadings.toList()
                 }
             }
         }
