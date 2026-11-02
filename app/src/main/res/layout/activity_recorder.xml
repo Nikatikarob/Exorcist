@@ -1,101 +1,92 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg_dark"
-    android:padding="16dp">
+    android:fillViewport="true">
 
-    <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="wrap_content"
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="НЕЙРО-СКАНЕР"
-        android:textColor="@color/neon_cyan"
-        android:textSize="20sp"
-        android:textStyle="bold"
-        android:fontFamily="monospace"
-        android:letterSpacing="0.15"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:orientation="vertical"
+        android:padding="16dp">
 
-    <TextView
-        android:id="@+id/tvStatus"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="ГОТОВ К ЗАПИСИ"
-        android:textColor="@color/text_dim"
-        android:textSize="12sp"
-        android:fontFamily="monospace"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvTitle" />
+        <TextView
+            android:id="@+id/tvTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.15"
+            android:text="НЕЙРО-СКАНЕР"
+            android:textColor="@color/neon_cyan"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
-    <!-- Live-радар -->
-    <com.exorcist.app.ui.RadarView
-        android:id="@+id/liveRadar"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginBottom="16dp"
-        android:background="#05050A"
-        app:layout_constraintBottom_toTopOf="@id/btnRecord"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvStatus" />
+        <TextView
+            android:id="@+id/tvStatus"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="16dp"
+            android:fontFamily="monospace"
+            android:text="ГОТОВ К ЗАПИСИ"
+            android:textColor="@color/text_dim"
+            android:textSize="12sp" />
 
-    <!-- Кнопка записи -->
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnRecord"
-        style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="НАЧАТЬ ЗАПИСЬ"
-        android:textColor="@color/neon_pink"
-        android:textSize="16sp"
-        android:fontFamily="monospace"
-        app:strokeColor="@color/neon_pink"
-        app:layout_constraintBottom_toTopOf="@id/recyclerViewSessions"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        android:layout_marginBottom="16dp" />
+        <!-- Live-радар -->
+        <com.exorcist.app.ui.RadarView
+            android:id="@+id/liveRadar"
+            android:layout_width="match_parent"
+            android:layout_height="300dp"
+            android:layout_marginBottom="16dp"
+            android:background="#05050A" />
 
-    <!-- Список сессий -->
-    <TextView
-        android:id="@+id/tvSessionsTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="ИСТОРИЯ СКАНИРОВАНИЙ"
-        android:textColor="@color/text_dim"
-        android:textSize="10sp"
-        android:fontFamily="monospace"
-        android:letterSpacing="0.1"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/btnRecord" />
+        <!-- Кнопка записи -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnRecord"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="16dp"
+            android:fontFamily="monospace"
+            android:text="НАЧАТЬ ЗАПИСЬ"
+            android:textAllCaps="true"
+            android:textColor="@color/neon_pink"
+            android:textSize="16sp"
+            xmlns:app="http://schemas.android.com/apk/res-auto"
+            app:strokeColor="@color/neon_pink" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/recyclerViewSessions"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        app:layout_constraintBottom_toTopOf="@id/btnBack"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/tvSessionsTitle" />
+        <TextView
+            android:id="@+id/tvSessionsTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:letterSpacing="0.1"
+            android:text="ИСТОРИЯ СКАНИРОВАНИЙ"
+            android:textColor="@color/text_dim"
+            android:textSize="10sp" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/btnBack"
-        style="@style/Widget.MaterialComponents.Button.TextButton"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginBottom="8dp"
-        android:text="← НАЗАД"
-        android:textColor="@color/text_dim"
-        android:fontFamily="monospace"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        <!-- Список сессий (фиксированная высота) -->
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/recyclerViewSessions"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnBack"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:fontFamily="monospace"
+            android:text="← НАЗАД"
+            android:textColor="@color/text_dim" />
+
+    </LinearLayout>
+
+</ScrollView>
