@@ -25,7 +25,7 @@ class RecorderActivity : AppCompatActivity() {
     
     private var isRecording = false
     private val liveReadings = mutableListOf<SensorReading>()
-    private val maxLiveReadings = 200 // Ограничиваем количество точек на радаре
+    private val maxLiveReadings = 300 // Ограничиваем количество точек на радаре для производительности
 
     companion object {
         private const val AUDIO_PERMISSION_CODE = 101
@@ -37,42 +37,48 @@ class RecorderActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         sensorFusion = SensorFusion(this)
+        
+        // Адаптер с кликом для открытия детализации
         adapter = SessionAdapter { session ->
             val intent = android.content.Intent(this, SessionDetailActivity::class.java)
             intent.putExtra("SESSION_ID", session.id)
             startActivity(intent)
         }
+        
         binding.recyclerViewSessions.layoutManager = LinearLayoutManager(this)
         binding.recyclerViewSessions.adapter = adapter
 
-        // Наблюдаем за сессиями
+        // 1. Наблюдаем за историей сессий в реальном времени
         lifecycleScope.launch {
             AppDatabase.getInstance(this@RecorderActivity).sensorDao().getAllSessions().collectLatest { sessions ->
                 adapter.submitList(sessions)
             }
         }
 
-        // Live-радар: подписываемся на показания в реальном времени
+        // 2. Live-радар: подписываемся на показания в реальном времени
         lifecycleScope.launch {
             sensorFusion.currentReading.collectLatest { reading ->
                 if (reading != null && isRecording) {
-                    // Проверяем, есть ли аномалия
+                    // Проверяем, зафиксировал ли ИИ аномалию
                     val hasAnomaly = reading.anomalyStatus.contains("ВНИМАНИЕ") || 
                                      reading.anomalyStatus.contains("АНОМАЛИЯ")
                     
                     if (hasAnomaly) {
                         liveReadings.add(reading)
-                        // Ограничиваем количество точек
+                        
+                        // Ограничиваем количество точек, чтобы не перегружать память и отрисовку
                         if (liveReadings.size > maxLiveReadings) {
                             liveReadings.removeAt(0)
                         }
-                        // Передаём в радар
+                        
+                        // Обновляем радар
                         binding.liveRadar.readings = liveReadings.toList()
                     }
                 }
             }
         }
 
+        // 3. Кнопка записи
         binding.btnRecord.setOnClickListener {
             if (checkAudioPermission()) {
                 toggleRecording()
@@ -81,6 +87,7 @@ class RecorderActivity : AppCompatActivity() {
             }
         }
 
+        // 4. Кнопка назад
         binding.btnBack.setOnClickListener {
             finish()
         }
@@ -100,29 +107,35 @@ class RecorderActivity : AppCompatActivity() {
             if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 toggleRecording()
             } else {
-                Toast.makeText(this, "Нужен доступ к микрофону", Toast.LENGTH_LONG).show()
+                Toast.makeText(this, "Нужен доступ к микрофону для анализа ультразвука", Toast.LENGTH_LONG).show()
             }
         }
     }
 
     private fun toggleRecording() {
         if (!isRecording) {
+            // Начинаем запись
             liveReadings.clear()
             binding.liveRadar.readings = emptyList()
             
             sensorFusion.startRecording("Комната")
             isRecording = true
+            
             binding.btnRecord.text = "ОСТАНОВИТЬ ЗАПИСЬ"
             binding.btnRecord.strokeColor = ContextCompat.getColorStateList(this, R.color.neon_cyan)
             binding.btnRecord.setTextColor(ContextCompat.getColor(this, R.color.neon_cyan))
-            binding.tvStatus.text = "СКАНИРОВАНИЕ..."
+            
+            binding.tvStatus.text = "СКАНИРОВАНИЕ... (КАЛИБРОВКА 15 сек)"
             binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.neon_cyan))
         } else {
+            // Останавливаем запись
             sensorFusion.stopRecording()
             isRecording = false
+            
             binding.btnRecord.text = "НАЧАТЬ ЗАПИСЬ"
             binding.btnRecord.strokeColor = ContextCompat.getColorStateList(this, R.color.neon_pink)
             binding.btnRecord.setTextColor(ContextCompat.getColor(this, R.color.neon_pink))
+            
             binding.tvStatus.text = "ЗАПИСЬ ОСТАНОВЛЕНА"
             binding.tvStatus.setTextColor(ContextCompat.getColor(this, R.color.text_dim))
         }
