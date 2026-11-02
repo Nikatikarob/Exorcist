@@ -94,31 +94,31 @@ class RadarView @JvmOverloads constructor(
                     canvas.drawLine(mapX(prev.posX), mapY(prev.posY), cx, cy, pathPaint)
                 }
 
-                // Проверяем на аномалии и рисуем ауры
-                val isMagSpike = r.magneticTotal > 60f
-                val isAudioSpike = r.audioAmplitude > 500f
+                // Используем ИИ-анализ вместо сырых порогов
+val isMagSpike = r.anomalyStatus.contains("ВНИМАНИЕ") && r.anomalyReason.contains("магнитное")
+val isAudioSpike = r.anomalyStatus.contains("ВНИМАНИЕ") && r.anomalyReason.contains("акустический")
+val isCorrelation = r.anomalyStatus.contains("АНОМАЛИЯ")
 
-                if (isMagSpike || isAudioSpike) {
-                    val radius = 15f + (r.magneticTotal / 5f).coerceAtMost(30f)
-                    
-                    when {
-                        isMagSpike && isAudioSpike -> {
-                            auraPaint.color = Color.parseColor("#80FF006E")
-                            auraPaint.setShadowLayer(20f, 0f, 0f, Color.parseColor("#FF006E"))
-                        }
-                        isMagSpike -> {
-                            auraPaint.color = Color.parseColor("#80FF006E")
-                            auraPaint.setShadowLayer(15f, 0f, 0f, Color.parseColor("#FF006E"))
-                        }
-                        isAudioSpike -> {
-                            auraPaint.color = Color.parseColor("#80FEE402")
-                            auraPaint.setShadowLayer(15f, 0f, 0f, Color.parseColor("#FEE402"))
-                        }
-                    }
-                    canvas.drawCircle(cx, cy, radius, auraPaint)
-                    auraPaint.clearShadowLayer()
-                }
-            }
+if (isMagSpike || isAudioSpike || isCorrelation) {
+    val radius = if (isCorrelation) 25f else 15f + (r.magneticTotal / 5f).coerceAtMost(30f)
+    
+    when {
+        isCorrelation -> {
+            auraPaint.color = Color.parseColor("#CCFF0000") // Красный для корреляции
+            auraPaint.setShadowLayer(25f, 0f, 0f, Color.parseColor("#FF0000"))
+        }
+        isMagSpike -> {
+            auraPaint.color = Color.parseColor("#80FF006E") // Розовый для магнитного
+            auraPaint.setShadowLayer(15f, 0f, 0f, Color.parseColor("#FF006E"))
+        }
+        isAudioSpike -> {
+            auraPaint.color = Color.parseColor("#80FEE402") // Жёлтый для акустики
+            auraPaint.setShadowLayer(15f, 0f, 0f, Color.parseColor("#FEE402"))
+        }
+    }
+    canvas.drawCircle(cx, cy, radius, auraPaint)
+    auraPaint.clearShadowLayer()
+}
 
             // 3. Рисуем текущую позицию (точка в конце)
             val last = readings.last()
