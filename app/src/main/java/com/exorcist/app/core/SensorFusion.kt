@@ -26,11 +26,9 @@ class SensorFusion(private val context: Context) : SensorEventListener {
     
     private val sensorManager = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     
-    // Пространственный трекер (3D-позиция и ориентация)
     val spatialTracker = SpatialTracker()
     val anomalyDetector = AnomalyDetector()
     
-    // Датчики
     private val magnetometer = sensorManager.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
     private val accelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
     private val gyroscope = sensorManager.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
@@ -38,7 +36,6 @@ class SensorFusion(private val context: Context) : SensorEventListener {
     private val lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)
     private val proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY)
     
-    // Текущие значения сенсоров
     private var magneticX = 0f
     private var magneticY = 0f
     private var magneticZ = 0f
@@ -53,24 +50,19 @@ class SensorFusion(private val context: Context) : SensorEventListener {
     private var light = 0f
     private var proximity = 0f
     
-    // Аудио (ультразвук)
     private var audioFrequency = 0f
     private var audioAmplitude = 0f
     private var audioRecord: AudioRecord? = null
     private var isRecordingAudio = false
     
-    // База данных
     private val database = AppDatabase.getInstance(context)
     private val dao = database.sensorDao()
     
-    // Корутин скоуп
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
-    // Текущая сессия
     private var currentSessionId: Long = 0
     private var isRecording = false
     
-    // Поток для UI
     private val _currentReading = MutableStateFlow<SensorReading?>(null)
     val currentReading: StateFlow<SensorReading?> = _currentReading
     
@@ -85,16 +77,13 @@ class SensorFusion(private val context: Context) : SensorEventListener {
         if (isRecording) return
         
         scope.launch {
-            // Создаём новую сессию
             val session = SensorSession(locationName = locationName)
             currentSessionId = dao.insertSession(session)
             isRecording = true
             
-            // Сбрасываем трекер позиции
             spatialTracker.reset()
             anomalyDetector.reset()
             
-            // Регистрируем слушатели сенсоров
             magnetometer?.let { sensorManager.registerListener(this@SensorFusion, it, SensorManager.SENSOR_DELAY_NORMAL) }
             accelerometer?.let { sensorManager.registerListener(this@SensorFusion, it, SensorManager.SENSOR_DELAY_NORMAL) }
             gyroscope?.let { sensorManager.registerListener(this@SensorFusion, it, SensorManager.SENSOR_DELAY_NORMAL) }
@@ -102,10 +91,7 @@ class SensorFusion(private val context: Context) : SensorEventListener {
             lightSensor?.let { sensorManager.registerListener(this@SensorFusion, it, SensorManager.SENSOR_DELAY_NORMAL) }
             proximitySensor?.let { sensorManager.registerListener(this@SensorFusion, it, SensorManager.SENSOR_DELAY_NORMAL) }
             
-            // Запускаем запись аудио
             startAudioRecording()
-            
-            // Запускаем цикл сохранения
             saveLoop()
             
             Log.d(TAG, "Recording started: session $currentSessionId")
@@ -117,14 +103,9 @@ class SensorFusion(private val context: Context) : SensorEventListener {
         
         scope.launch {
             isRecording = false
-            
-            // Отписываемся от сенсоров
             sensorManager.unregisterListener(this@SensorFusion)
-            
-            // Останавливаем аудио
             stopAudioRecording()
             
-            // Обновляем сессию
             val session = dao.getSessionById(currentSessionId)
             session?.let {
                 val updated = it.copy(
@@ -135,9 +116,7 @@ class SensorFusion(private val context: Context) : SensorEventListener {
                 dao.updateSession(updated)
             }
             
-            // Очистка старых данных
             dao.cleanup()
-            
             Log.d(TAG, "Recording stopped: session $currentSessionId")
         }
     }
@@ -186,9 +165,7 @@ class SensorFusion(private val context: Context) : SensorEventListener {
                 maxAmplitude = amplitude
             }
         }
-        
         audioAmplitude = maxAmplitude.toFloat()
-        
         if (maxAmplitude > 100) {
             audioFrequency = 18000f
         } else {
@@ -201,43 +178,40 @@ class SensorFusion(private val context: Context) : SensorEventListener {
             delay(1000)
             
             val detection = anomalyDetector.analyze(magneticTotal, audioAmplitude)
-
-val reading = SensorReading(
-    sessionId = currentSessionId,
-    magneticX = magneticX,
-    magneticY = magneticY,
-    magneticZ = magneticZ,
-    magneticTotal = magneticTotal,
-    audioFrequency = audioFrequency,
-    audioAmplitude = audioAmplitude,
-    accelerationX = accelX,
-    accelerationY = accelY,
-    accelerationZ = accelZ,
-    accelerationTotal = accelTotal,
-    pressure = pressure,
-    light = light,
-    proximity = proximity,
-    posX = spatialTracker.x,
-    posY = spatialTracker.y,
-    posZ = spatialTracker.z,
-    azimuth = spatialTracker.azimuth,
-    pitch = spatialTracker.pitch,
-    roll = spatialTracker.roll,
-    anomalyStatus = detection.severity,
-    anomalyReason = detection.reason
-)
+            
+            val reading = SensorReading(
+                sessionId = currentSessionId,
+                magneticX = magneticX,
+                magneticY = magneticY,
+                magneticZ = magneticZ,
+                magneticTotal = magneticTotal,
+                audioFrequency = audioFrequency,
+                audioAmplitude = audioAmplitude,
+                accelerationX = accelX,
+                accelerationY = accelY,
+                accelerationZ = accelZ,
+                accelerationTotal = accelTotal,
+                pressure = pressure,
+                light = light,
+                proximity = proximity,
+                posX = spatialTracker.x,
+                posY = spatialTracker.y,
+                posZ = spatialTracker.z,
+                azimuth = spatialTracker.azimuth,
+                pitch = spatialTracker.pitch,
+                roll = spatialTracker.roll,
+                anomalyStatus = detection.severity,
+                anomalyReason = detection.reason
+            )
             
             dao.insertReading(reading)
-            
-            Log.d(TAG, "Saved reading: pos=(${spatialTracker.x}, ${spatialTracker.y}, ${spatialTracker.z}), mag=${magneticTotal}")
+            Log.d(TAG, "Saved: mag=${magneticTotal}, audio=${audioAmplitude}, status=${detection.severity}")
         }
     }
     
     override fun onSensorChanged(event: SensorEvent?) {
-        // Сначала передаём событие пространственному трекеру
         spatialTracker.onSensorChanged(event)
         
-        // Потом обрабатываем для сырых значений
         when (event?.sensor?.type) {
             Sensor.TYPE_MAGNETIC_FIELD -> {
                 magneticX = event.values[0]
@@ -251,22 +225,16 @@ val reading = SensorReading(
                 accelZ = event.values[2]
                 accelTotal = sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ)
             }
-            Sensor.TYPE_PRESSURE -> {
-                pressure = event.values[0]
-            }
-            Sensor.TYPE_LIGHT -> {
-                light = event.values[0]
-            }
-            Sensor.TYPE_PROXIMITY -> {
-                proximity = event.values[0]
-            }
+            Sensor.TYPE_PRESSURE -> pressure = event.values[0]
+            Sensor.TYPE_LIGHT -> light = event.values[0]
+            Sensor.TYPE_PROXIMITY -> proximity = event.values[0]
         }
         
-        // Обновляем currentReading в реальном времени
         updateCurrentReading()
     }
     
     private fun updateCurrentReading() {
+        val detection = anomalyDetector.analyze(magneticTotal, audioAmplitude)
         val reading = SensorReading(
             sessionId = currentSessionId,
             magneticX = magneticX,
@@ -287,14 +255,14 @@ val reading = SensorReading(
             posZ = spatialTracker.z,
             azimuth = spatialTracker.azimuth,
             pitch = spatialTracker.pitch,
-            roll = spatialTracker.roll
+            roll = spatialTracker.roll,
+            anomalyStatus = detection.severity,
+            anomalyReason = detection.reason
         )
         _currentReading.value = reading
     }
     
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {
-        // Игнорируем
-    }
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
     
     fun destroy() {
         stopRecording()
