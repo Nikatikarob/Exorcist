@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#070C11"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.14"
+        android:text="ПАНЕЛЬ КАНАЛОВ"
+        android:textColor="#00E5C0"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvVerdict"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:text="НАЖМИТЕ СТАРТ"
+        android:textColor="#FFB020"
+        android:textSize="15sp"
+        android:textStyle="bold" />
+
+    <com.exorcist.app.ui.SpectrumWaterfallView
+        android:id="@+id/spectrum"
+        android:layout_width="match_parent"
+        android:layout_height="230dp"
+        android:layout_marginTop="8dp" />
+
+    <LinearLayout
+        android:id="@+id/bandRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/band0" style="@style/ProbeBand" android:text="0–8k\n—" />
+        <TextView android:id="@+id/band1" style="@style/ProbeBand" android:text="8–16k\n—" />
+        <TextView android:id="@+id/band2" style="@style/ProbeBand" android:text="16–24k\n—" />
+        <TextView android:id="@+id/band3" style="@style/ProbeBand" android:text="24–32k\n—" />
+        <TextView android:id="@+id/band4" style="@style/ProbeBand" android:text="32–48k\n—" />
+    </LinearLayout>
+
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp"
+        android:scrollbars="vertical">
+
+        <LinearLayout
+            android:id="@+id/channelList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical" />
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnToggle"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:text="СТАРТ"
+            android:textColor="#7CFF3D"
+            android:textSize="16sp"
+            app:strokeColor="#7CFF3D" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCopy"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:text="КОПИРОВАТЬ"
+            android:textColor="#00E5C0"
+            android:textSize="16sp"
+            app:strokeColor="#00E5C0" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnBack"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:fontFamily="monospace"
+        android:text="← В МЕНЮ"
+        android:textColor="#7E93A3"
+        android:textSize="15sp" />
+
+</LinearLayout>
