@@ -31,6 +31,7 @@ class ChannelState(
     var events: Int = 0
     var lastMs: Long = 0
     var failed: Boolean = false
+    var rateUsed: String = "—"
     val history: FloatArray = FloatArray(60)
     var histLen: Int = 0
     private var histHead: Int = 0
@@ -59,14 +60,15 @@ class SensorProbe(context: Context) {
 
     private val sm = context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val map = LinkedHashMap<String, ChannelState>()
-    private val bound = ArrayList<Pair<Sensor, ChannelState>>()
-    private var lastEmit = 0L
+    private val bound = ArrayList<Sensor>()
+    private val allNames = ArrayList<String>()
+    private val proxNames = ArrayList<String>()
 
     private val listener = object : SensorEventListener {
         override fun onSensorChanged(e: SensorEvent) {
             val st = map[e.sensor.name] ?: return
             synchronized(map) {
-                val n = minOf(3, e.values.size)
+                val n = minOf(6, e.values.size)
                 val arr = FloatArray(n)
                 for (i in 0 until n) arr[i] = e.values[i]
                 st.values = arr
@@ -78,83 +80,97 @@ class SensorProbe(context: Context) {
         override fun onAccuracyChanged(s: Sensor?, a: Int) {}
     }
 
+    private fun trim(v: Float): String =
+        if (abs(v) >= 100f) v.toInt().toString() else String.format(java.util.Locale.US, "%.4f", v)
+
     private fun classify(s: Sensor): ChannelState? {
         val st = s.stringType.lowercase()
         val nm = s.name.lowercase()
         val hz = if (s.minDelay > 0) (1_000_000f / s.minDelay).toInt().toString() + " Гц" else "по событию"
-        val base = "диапазон " + trim(s.maximumRange) + " · шаг " + trim(s.resolution) + " · " + hz
+        val base = "диап " + trim(s.maximumRange) + " · шаг " + trim(s.resolution) + " · " + hz
 
+        if (s.type == Sensor.TYPE_PROXIMITY) {
+            val ell = nm.contains("elliptic")
+            return ChannelState(
+                s.name,
+                if (ell) "Elliptic Proximity (УЗ)" else "Proximity прочий",
+                s.name, "ед.", base,
+                if (ell) "КЛЮЧЕВОЙ. Води рукой 5→150 см, смотри min/max. Совпадёт с см — готовый дальномер."
+                else "Для сравнения с ультразвуковым.",
+                if (ell) 0xFF7CFF3D.toInt() else 0xFF7E93A3.toInt()
+            )
+        }
         return when {
-            s.type == Sensor.TYPE_PROXIMITY && nm.contains("elliptic") -> ChannelState(
-                s.name, "Elliptic Proximity", s.name, "ед.", base,
-                "КЛЮЧЕВОЙ. Води рукой 5→150 см. Если число совпадает с сантиметрами — готовый дальномер, DSP не нужен.", 0xFF7CFF3D.toInt())
-            s.type == Sensor.TYPE_PROXIMITY -> ChannelState(
-                s.name, "Оптический proximity", s.name, "ед.", base,
-                "Бинарный. Для сравнения с ультразвуковым.", 0xFF7E93A3.toInt())
-            st.contains("flicker") -> ChannelState(
-                s.name, "Мерцание света", s.name, "Гц", base,
-                "Наведи на LED-лампу и на лампу накаливания. Частота ШИМ читается как число.", 0xFFFFB020.toInt())
-            st.contains("cct") -> ChannelState(
-                s.name, "Цветовая температура", s.name, "K", base,
+            st.contains("flicker") -> ChannelState(s.name, "Мерцание света", s.name, "Гц", base,
+                "values[0] — частота. 100 Гц = 2×50, сеть. Наведи на разные лампы.", 0xFFFFB020.toInt())
+            st.contains("cct") -> ChannelState(s.name, "Цветовая температура", s.name, "K", base,
                 "Различает LED / накаливание / люминесцент.", 0xFF2E7BFF.toInt())
-            st.contains("rear_light") -> ChannelState(
-                s.name, "Задняя освещённость", s.name, "лк", base,
-                "Свет со стороны сцены, не экрана. База для режима день/ночь.", 0xFF00E5C0.toInt())
-            st.contains("ambient_light_scene") -> ChannelState(
-                s.name, "Сцена освещения", s.name, "ед.", base,
+            st.contains("rear_light") -> ChannelState(s.name, "Задняя освещённость", s.name, "лк", base,
+                "Свет со стороны сцены. База для день/ночь.", 0xFF00E5C0.toInt())
+            st.contains("ambient_light_scene") -> ChannelState(s.name, "Сцена освещения", s.name, "ед.", base,
                 "Класс сцены от вендора.", 0xFF0FF0FC.toInt())
-            st.contains("sar") -> ChannelState(
-                s.name, "Ёмкостный SAR", s.name, "ед.", base,
-                "Единственный ёмкостный канал наружу. Поднеси руку и металл — сравни.", 0xFFFF2E88.toInt())
-            st.contains("af_ccl") -> ChannelState(
-                s.name, "AF CCL (wide)", s.name, "ед.", base,
-                "Возможно позиция линзы → грубый признак глубины.", 0xFFA855F7.toInt())
-            st.contains("gyro_hs") -> ChannelState(
-                s.name, "Гироскоп HS 800 Гц", s.name, "рад/с", base,
-                "Приложи к работающей технике — полоса вибродиагностики шире.", 0xFFA855F7.toInt())
-            s.type == Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED -> ChannelState(
-                s.name, "Магнит без калибровки", s.name, "мкТл", base,
-                "Правильный источник для карты: калиброванный съедает статику.", 0xFFFF2E88.toInt())
-            s.type == Sensor.TYPE_MAGNETIC_FIELD -> ChannelState(
-                s.name, "Магнит калиброванный", s.name, "мкТл", base,
-                "Для сравнения с некалиброванным.", 0xFFFF2E88.toInt())
-            st.contains("step") && !st.contains("wakeup") -> ChannelState(
-                s.name, "Детектор шага", s.name, "шаг", base,
-                "Аппаратный. Основа PDR вместо двойного интегрирования.", 0xFF7CFF3D.toInt())
-            s.type == Sensor.TYPE_GAME_ROTATION_VECTOR -> ChannelState(
-                s.name, "Курс без магнитометра", s.name, "ед.", base,
-                "Не портится магнитными аномалиями. Курс для сонара.", 0xFF2E7BFF.toInt())
-            s.type == Sensor.TYPE_LIGHT -> ChannelState(
-                s.name, "Освещённость (фронт)", s.name, "лк", base,
+            st.contains("sar") -> ChannelState(s.name, "Ёмкостный SAR", s.name, "ед.", base,
+                "Значения 0 и 5. Поднеси руку, потом металл — сравни.", 0xFFFF2E88.toInt())
+            st.contains("af_ccl") -> ChannelState(s.name, "AF CCL (wide)", s.name, "ед.", base,
+                "Молчит без камеры. Включи камеру и проверь снова.", 0xFFA855F7.toInt())
+            st.contains("gyro_hs") -> ChannelState(s.name, "Гироскоп HS", s.name, "рад/с", base,
+                "800 Гц. Если FASTEST отказал — смотри rateUsed.", 0xFFA855F7.toInt())
+            s.type == Sensor.TYPE_GYROSCOPE -> ChannelState(s.name, "Гироскоп 200 Гц", s.name, "рад/с", base,
+                "Резервный канал вибрации.", 0xFFA855F7.toInt())
+            s.type == Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED -> ChannelState(s.name, "Магнит без калибровки", s.name, "мкТл", base,
+                "6 значений: 0-2 поле, 3-5 оценка смещения. Смещение ~300 мкТл вычитать.", 0xFFFF2E88.toInt())
+            s.type == Sensor.TYPE_MAGNETIC_FIELD -> ChannelState(s.name, "Магнит калиброванный", s.name, "мкТл", base,
+                "Сумма ≈54 мкТл = земное поле. Адаптивный ноль может съедать статику.", 0xFFFF2E88.toInt())
+            st.contains("step") -> ChannelState(s.name, "Шаги", s.name, "шаг", base,
+                "Нужно ACTIVITY_RECOGNITION. Основа PDR.", 0xFF7CFF3D.toInt())
+            st.contains("significant") -> ChannelState(s.name, "Значимое движение", s.name, "ед.", base,
+                "Аппаратный триггер начала движения.", 0xFF7CFF3D.toInt())
+            s.type == Sensor.TYPE_GAME_ROTATION_VECTOR -> ChannelState(s.name, "Курс без магнитометра", s.name, "кват", base,
+                "4 компонента. Не портится магнитными аномалиями.", 0xFF2E7BFF.toInt())
+            s.type == Sensor.TYPE_LIGHT -> ChannelState(s.name, "Освещённость фронт", s.name, "лк", base,
                 "Датчик со стороны экрана.", 0xFFFFB020.toInt())
-            s.type == Sensor.TYPE_ACCELEROMETER -> ChannelState(
-                s.name, "Акселерометр", s.name, "м/с²", base,
-                "200 Гц. Приложенный к корпусу техники — виброспектр до 100 Гц.", 0xFF00E5C0.toInt())
+            s.type == Sensor.TYPE_ACCELEROMETER -> ChannelState(s.name, "Акселерометр", s.name, "м/с²", base,
+                "200 Гц. Приложи к технике — виброспектр до 100 Гц.", 0xFF00E5C0.toInt())
             else -> null
         }
     }
 
-    private fun trim(v: Float): String {
-        return if (abs(v) >= 100f) v.toInt().toString() else String.format(java.util.Locale.US, "%.4f", v)
+    private fun tryRegister(s: Sensor): String {
+        val rates = intArrayOf(
+            SensorManager.SENSOR_DELAY_FASTEST,
+            SensorManager.SENSOR_DELAY_GAME,
+            SensorManager.SENSOR_DELAY_NORMAL
+        )
+        val names = arrayOf("FASTEST", "GAME", "NORMAL")
+        for (i in rates.indices) {
+            val ok = try {
+                sm.registerListener(listener, s, rates[i])
+            } catch (e: Exception) {
+                Log.w("SensorProbe", "reg ${s.name} ${names[i]}: ${e.message}")
+                false
+            }
+            if (ok) return names[i]
+        }
+        return "ОТКАЗ"
     }
 
     fun start() {
         stop()
+        allNames.clear()
+        proxNames.clear()
         val all = sm.getSensorList(Sensor.TYPE_ALL)
         for (s in all) {
+            allNames.add(s.name + " [" + s.stringType + "]")
+            if (s.type == Sensor.TYPE_PROXIMITY) proxNames.add(s.name)
             val cs = classify(s) ?: continue
             if (map.containsKey(cs.key)) continue
+            val rate = tryRegister(s)
+            cs.rateUsed = rate
+            cs.failed = rate == "ОТКАЗ"
             map[cs.key] = cs
-            val ok = try {
-                sm.registerListener(listener, s, SensorManager.SENSOR_DELAY_FASTEST)
-            } catch (e: Exception) {
-                Log.w("SensorProbe", "register ${s.name}: ${e.message}")
-                false
-            }
-            cs.failed = !ok
-            if (ok) bound.add(Pair(s, cs))
+            if (!cs.failed) bound.add(s)
         }
-        Log.d("SensorProbe", "bound ${bound.size} of ${map.size}")
+        Log.d("SensorProbe", "list=${all.size} bound=${bound.size} prox=${proxNames.size}")
     }
 
     fun stop() {
@@ -169,29 +185,32 @@ class SensorProbe(context: Context) {
 
     fun report(): String {
         val sb = StringBuilder()
+        sb.appendLine("=== ДИАГНОСТИКА СПИСКА ===")
+        sb.appendLine("getSensorList(TYPE_ALL) вернул: " + allNames.size)
+        sb.appendLine("PROXIMITY-датчиков в списке: " + proxNames.size)
+        for (p in proxNames) sb.appendLine("   " + p)
+        sb.appendLine("Elliptic в списке: " + if (allNames.any { it.contains("elliptic", true) }) "ДА" else "НЕТ")
+        sb.appendLine()
         sb.appendLine("=== ЖИВЫЕ КАНАЛЫ ===")
         synchronized(map) {
             for (c in map.values) {
-                if (c.failed) {
-                    sb.appendLine(c.title + " [" + c.hardware + "] — ОТКАЗ РЕГИСТРАЦИИ")
-                    continue
+                sb.append(c.title + " [" + c.hardware + "] " + c.unit + " · rate=" + c.rateUsed)
+                when {
+                    c.failed -> sb.appendLine(" — ОТКАЗ на всех частотах")
+                    c.events == 0 -> sb.appendLine(" — НЕТ СОБЫТИЙ")
+                    else -> {
+                        sb.appendLine()
+                        sb.appendLine("   сейчас: " + c.values.joinToString(" / ") { String.format(java.util.Locale.US, "%.4f", it) })
+                        sb.appendLine("   min " + String.format(java.util.Locale.US, "%.4f", c.minV) +
+                                " · max " + String.format(java.util.Locale.US, "%.4f", c.maxV) +
+                                " · событий " + c.events)
+                    }
                 }
-                if (c.events == 0) {
-                    sb.appendLine(c.title + " [" + c.hardware + "] — НЕТ СОБЫТИЙ")
-                    continue
-                }
-                sb.appendLine(c.title + " [" + c.hardware + "] " + c.unit)
-                sb.appendLine("   сейчас: " + c.values.joinToString(" / ") { String.format(java.util.Locale.US, "%.4f", it) })
-                sb.appendLine("   min " + String.format(java.util.Locale.US, "%.4f", c.minV) +
-                        " · max " + String.format(java.util.Locale.US, "%.4f", c.maxV) +
-                        " · событий " + c.events)
             }
         }
         return sb.toString()
     }
 }
-
-/* ---------------- FFT ---------------- */
 
 private class Fft(private val n: Int) {
     private val cosT = DoubleArray(n / 2)
@@ -281,17 +300,21 @@ class UltrasoundProbe {
     private var thread: Thread? = null
     var errorText: String = ""
         private set
+    var maxPeakHz: Float = 0f
+        private set
+    var maxCrest: Float = 0f
+        private set
 
     fun start(): Boolean {
         if (running) return true
         errorText = ""
+        maxPeakHz = 0f
+        maxCrest = 0f
 
         val rates = intArrayOf(96000, 48000, 44100)
         val sources = ArrayList<Pair<Int, String>>()
         sources.add(Pair(MediaRecorder.AudioSource.VOICE_RECOGNITION, "VOICE_RECOGNITION"))
-        if (Build.VERSION.SDK_INT >= 24) {
-            sources.add(Pair(MediaRecorder.AudioSource.UNPROCESSED, "UNPROCESSED"))
-        }
+        if (Build.VERSION.SDK_INT >= 24) sources.add(Pair(MediaRecorder.AudioSource.UNPROCESSED, "UNPROCESSED"))
         sources.add(Pair(MediaRecorder.AudioSource.MIC, "MIC"))
 
         var rec: AudioRecord? = null
@@ -307,20 +330,14 @@ class UltrasoundProbe {
             for (s in sources) {
                 try {
                     val c = AudioRecord(s.first, r, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, need)
-                    if (c.state == AudioRecord.STATE_INITIALIZED) {
-                        rec = c; rate = r; srcName = s.second; break
-                    } else c.release()
-                } catch (e: Exception) {
-                    Log.w(TAG, "${s.second}@$r: ${e.message}")
-                }
+                    if (c.state == AudioRecord.STATE_INITIALIZED) { rec = c; rate = r; srcName = s.second; break }
+                    else c.release()
+                } catch (e: Exception) { Log.w(TAG, "${s.second}@$r: ${e.message}") }
             }
             if (rec != null) break
         }
 
-        if (rec == null) {
-            errorText = "AudioRecord не инициализировался ни на одной частоте"
-            return false
-        }
+        if (rec == null) { errorText = "AudioRecord не инициализировался"; return false }
 
         running = true
         val record = rec
@@ -370,9 +387,7 @@ class UltrasoundProbe {
                     for (b in 0 until 5) {
                         val f0 = (b * 8000.0 / binHz).toInt()
                         val f1 = ((b + 1) * 8000.0 / binHz).toInt()
-                        if (f0 >= half) { bands[b] = -160f } else {
-                            bands[b] = median(db, f0, minOf(f1, half)).toFloat()
-                        }
+                        bands[b] = if (f0 >= half) -160f else median(db, f0, minOf(f1, half)).toFloat()
                     }
                     val hfFrom = minOf((15000.0 / binHz).toInt(), half - 2)
                     var pi = hfFrom
@@ -381,17 +396,19 @@ class UltrasoundProbe {
                     val floor = median(db, hfFrom, half)
                     val crest = pv - floor
                     val hz = (pi * binHz).toFloat()
-                    val cand = crest >= 14.0 && pv >= -95.0
+                    val cand = crest >= 14.0 && pv >= -115.0
                     stable = if (cand && abs(hz - lastPeak) < 180f) stable + frameMs else 0L
                     lastPeak = hz
                     seen++
                     val tone = seen > 10 && cand && stable >= 600L
+                    if (crest > maxCrest && pv >= -115.0) { maxCrest = crest.toFloat(); maxPeakHz = hz }
 
-                    val open = sr >= 96000 && bands[3] > -150f
+                    val shelf = bands[2] - bands[3]
+                    val open = sr >= 96000 && bands[3] > -125f && shelf < 12f
                     val verdict = when {
-                        sr < 96000 -> "fs " + sr / 1000 + " кГц — полоса выше 24 кГц вне обзора"
-                        open -> "ТРАКТ ОТКРЫТ выше 24 кГц · доступен chirp до 40 кГц"
-                        else -> "ПОЛОСА выше 24 кГц МЕРТВА · аналоговый фильтр закрыт"
+                        sr < 96000 -> "fs " + sr / 1000 + " кГц · обзор до " + (sr / 2000) + " кГц"
+                        open -> "ТРАКТ РЕАЛЬНО ОТКРЫТ выше 24 кГц"
+                        else -> "ВЫШЕ 24 кГц ПУСТО · 96k = апсемпл 48k · полоса 0–24 кГц"
                     }
 
                     latest = AudioFrame(sr, src, sr / 2f, binHz.toFloat(), disp.copyOf(), bands, labels,
@@ -416,18 +433,20 @@ class UltrasoundProbe {
     }
 
     fun report(): String {
-        val f = latest ?: return "=== АКУСТИКА ===\nнет данных\n"
         val sb = StringBuilder()
         sb.appendLine("=== АКУСТИКА ===")
+        sb.appendLine("Лучший тон за сессию: " + String.format(java.util.Locale.US, "%.2f", maxPeakHz / 1000) +
+                " кГц · crest " + String.format(java.util.Locale.US, "%.1f", maxCrest) + " dB")
+        val f = latest ?: return sb.toString() + "нет текущего кадра\n"
         sb.appendLine("fs " + f.sampleRate + " Гц · источник " + f.source + " · Nyq " + (f.nyquist / 1000).toInt() + " кГц")
         sb.appendLine("ВЕРДИКТ: " + f.verdict)
+        sb.appendLine("Обрыв 16-24k → 24-32k: " + String.format(java.util.Locale.US, "%.1f", f.bands[2] - f.bands[3]) + " dB")
         sb.appendLine("Медианы полос, dBFS:")
-        for (i in 0 until 5) {
-            sb.appendLine("   " + f.bandLabels[i] + " : " + String.format(java.util.Locale.US, "%.1f", f.bands[i]))
-        }
+        for (i in 0 until 5) sb.appendLine("   " + f.bandLabels[i] + " : " + String.format(java.util.Locale.US, "%.1f", f.bands[i]))
         sb.appendLine("Пик 15k+ : " + String.format(java.util.Locale.US, "%.2f", f.peakHz / 1000) + " кГц, " +
                 String.format(java.util.Locale.US, "%.1f", f.peakDb) + " dBFS, crest " +
-                String.format(java.util.Locale.US, "%.1f", f.crestDb) + " dB, тон=" + f.isTone)
+                String.format(java.util.Locale.US, "%.1f", f.crestDb) + " dB, тон=" + f.isTone +
+                ", устойч=" + f.stableMs + " мс")
         return sb.toString()
     }
 
