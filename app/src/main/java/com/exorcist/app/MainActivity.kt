@@ -5,8 +5,8 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.exorcist.app.databinding.ActivityMainBinding
-import com.exorcist.app.ui.CapabilitiesActivity
 import com.exorcist.app.ui.EMFGuideActivity
+import com.exorcist.app.ui.ProbeActivity
 import com.exorcist.app.ui.RecorderActivity
 
 class MainActivity : AppCompatActivity() {
@@ -22,9 +22,9 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, RecorderActivity::class.java))
         }
 
-        binding.btnAcoustic.text = "ДИАГНОСТИКА"
+        binding.btnAcoustic.text = "ПАНЕЛЬ КАНАЛОВ"
         binding.btnAcoustic.setOnClickListener {
-            startActivity(Intent(this, CapabilitiesActivity::class.java))
+            startActivity(Intent(this, ProbeActivity::class.java))
         }
 
         binding.btnMap.setOnClickListener {
