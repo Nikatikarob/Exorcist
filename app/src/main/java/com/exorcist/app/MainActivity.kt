@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.exorcist.app.databinding.ActivityMainBinding
+import com.exorcist.app.ui.CapabilitiesActivity
 import com.exorcist.app.ui.EMFGuideActivity
 import com.exorcist.app.ui.RecorderActivity
 
@@ -17,33 +18,25 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupButtons()
-    }
-
-    private fun setupButtons() {
         binding.btnAR.setOnClickListener {
-            // Открываем Нейро-сканер (бывший AR)
             startActivity(Intent(this, RecorderActivity::class.java))
         }
-        
-        binding.btnMap.setOnClickListener { 
-            showToast("Карта: В разработке")
+
+        binding.btnAcoustic.text = "ДИАГНОСТИКА"
+        binding.btnAcoustic.setOnClickListener {
+            startActivity(Intent(this, CapabilitiesActivity::class.java))
         }
-        
-        binding.btnAcoustic.setOnClickListener { 
-            showToast("Акустика: В разработке")
+
+        binding.btnMap.setOnClickListener {
+            Toast.makeText(this, "Раздел в разработке", Toast.LENGTH_SHORT).show()
         }
-        
-        binding.btnEMF.setOnClickListener { 
+
+        binding.btnEMF.setOnClickListener {
             startActivity(Intent(this, EMFGuideActivity::class.java))
         }
-        
-        binding.btnAnomaly.setOnClickListener { 
-            showToast("Детектор аномалий: В разработке")
-        }
-    }
 
-    private fun showToast(message: String) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show()
+        binding.btnAnomalies.setOnClickListener {
+            Toast.makeText(this, "Раздел в разработке", Toast.LENGTH_SHORT).show()
+        }
     }
 }
