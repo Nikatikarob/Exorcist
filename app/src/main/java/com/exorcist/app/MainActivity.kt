@@ -34,9 +34,5 @@ class MainActivity : AppCompatActivity() {
         binding.btnEMF.setOnClickListener {
             startActivity(Intent(this, EMFGuideActivity::class.java))
         }
-
-        binding.btnAnomalies.setOnClickListener {
-            Toast.makeText(this, "Раздел в разработке", Toast.LENGTH_SHORT).show()
-        }
     }
 }
