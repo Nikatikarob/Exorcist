@@ -98,8 +98,6 @@ class SensorProbe(context: Context) {
         val base = "type=" + s.type + " · диап " + trim(s.maximumRange) +
                 " · шаг " + trim(s.resolution) + " · " + hz
 
-        // КЛЮЧЕВОЕ: привязка по stringType, а не по числовому type.
-        // У Elliptic числовой тип вендорский, хотя строка стандартная.
         val isProx = st.contains("proximity") || s.type == Sensor.TYPE_PROXIMITY
         if (isProx) {
             val ell = nm.contains("elliptic")
@@ -123,7 +121,7 @@ class SensorProbe(context: Context) {
             st.contains("ambient_light_scene") -> ChannelState(s.name, "Сцена освещения", s.name, "ед.", base,
                 "Класс сцены от вендора.", 0xFF0FF0FC.toInt(), s.type)
             st.contains("sar") -> ChannelState(s.name, "Ёмкостный SAR", s.name, "ед.", base,
-                "Состояния 0 и 5. Рука / металл — сравни.", 0xFFFF2E88.toInt(), s.type)
+                "Рабочее значение в values[1], не в values[0]. Состояния 0 и 5.", 0xFFFF2E88.toInt(), s.type)
             st.contains("af_ccl") -> ChannelState(s.name, "AF CCL (wide)", s.name, "ед.", base,
                 "Молчит без камеры. Проверь с включённой камерой.", 0xFFA855F7.toInt(), s.type)
             st.contains("gyro_hs") -> ChannelState(s.name, "Гироскоп HS", s.name, "рад/с", base,
@@ -317,6 +315,7 @@ class UltrasoundProbe {
     }
 
     @Volatile var latest: AudioFrame? = null
+        private set
     @Volatile private var running = false
     private var thread: Thread? = null
     var errorText: String = ""
@@ -384,6 +383,8 @@ class UltrasoundProbe {
             var lastPeak = 0f
             var stable = 0L
             var seen = 0
+            var toneState = false
+            var drop = 0
 
             try {
                 record.startRecording()
@@ -413,7 +414,6 @@ class UltrasoundProbe {
                         bands[b] = if (f0 >= half) -160f else median(db, f0, minOf(f1, half)).toFloat()
                     }
 
-                    // Потолок анализа: не заходим в мёртвую апсемпл-зону
                     val deadAbove24 = sr >= 96000 && bands[3] <= -125f
                     val ceilHz = if (deadAbove24) 24000.0 else sr / 2.0
                     ceilingHz = ceilHz.toFloat()
@@ -424,17 +424,33 @@ class UltrasoundProbe {
                     var pv = -160.0
                     for (i in hfFrom until hfTo) if (db[i] > pv) { pv = db[i]; pi = i }
 
-                    // Пол не ниже цифрового шума, иначе crest раздувается
                     val floorRaw = median(db, hfFrom, hfTo)
                     val floor = maxOf(floorRaw, FLOOR_CLAMP)
                     val crest = pv - floor
                     val hz = (pi * binHz).toFloat()
 
-                    val cand = crest >= CREST_MIN && pv >= -115.0
-                    stable = if (cand && abs(hz - lastPeak) < HOP_TOL_HZ) stable + frameMs else 0L
-                    lastPeak = hz
+                    // Замок тона: гистерезис + допуск пропаданий + ведение частоты
+                    val enter = crest >= CREST_MIN && pv >= -115.0
+                    val hold = crest >= CREST_MIN - 5.0 && pv >= -118.0
+                    val cand = if (toneState) hold else enter
+                    if (cand && abs(hz - lastPeak) < HOP_TOL_HZ) {
+                        stable += frameMs
+                        drop = 0
+                        lastPeak = lastPeak * 0.7f + hz * 0.3f
+                    } else if (cand) {
+                        lastPeak = hz
+                        drop = 0
+                    } else {
+                        drop++
+                        if (drop > 3) { stable = 0; drop = 0 }
+                    }
                     seen++
-                    val tone = seen > 10 && cand && stable >= 600L
+                    toneState = when {
+                        !toneState && seen > 10 && stable >= 600L -> true
+                        toneState && stable == 0L -> false
+                        else -> toneState
+                    }
+                    val tone = toneState
                     if (crest > maxCrest && pv >= -115.0) { maxCrest = crest.toFloat(); maxPeakHz = hz }
 
                     val shelf = bands[2] - bands[3]
