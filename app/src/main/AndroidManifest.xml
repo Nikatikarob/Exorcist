@@ -103,6 +103,11 @@
         <meta-data
             android:name="com.google.ar.core"
             android:value="optional" />
+        <activity
+            android:name=".ui.SonarActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.Exorcist" />
 
     </application>
 
