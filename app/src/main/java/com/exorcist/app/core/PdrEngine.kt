@@ -5,6 +5,7 @@ import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.hypot
@@ -79,10 +80,8 @@ class PdrEngine(context: Context) : SensorEventListener {
         if (v.size < 4) return
         val x = v[0]; val y = v[1]; val z = v[2]; val w = v[3]
 
-        // Верхняя грань (0,1,0) в мировых координатах
         val topE = 2f * (x * y - w * z)
         val topN = 1f - 2f * (x * x + z * z)
-        // Направление "от экрана в сцену" (0,0,-1)
         val backE = -2f * (x * z + w * y)
         val backN = -2f * (y * z - w * x)
 
@@ -118,11 +117,11 @@ class PdrEngine(context: Context) : SensorEventListener {
         magDev = dev
 
         val now = System.currentTimeMillis()
-        if (kotlin.math.abs(dev) > magThreshold) {
+        if (abs(dev) > magThreshold) {
             if (devSince == 0L) {
                 devSince = now
             } else if (now - devSince > 250L && now - lastMarkMag > 1500L) {
-                addMark(MapMark.MAG, kotlin.math.abs(dev))
+                addMark(MapMark.MAG, abs(dev))
                 lastMarkMag = now
                 devSince = now
             }
