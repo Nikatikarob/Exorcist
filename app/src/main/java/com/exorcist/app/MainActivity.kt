@@ -7,7 +7,7 @@ import androidx.appcompat.app.AppCompatActivity
 import com.exorcist.app.databinding.ActivityMainBinding
 import com.exorcist.app.ui.EMFGuideActivity
 import com.exorcist.app.ui.ProbeActivity
-import com.exorcist.app.ui.RecorderActivity
+import com.exorcist.app.ui.RoomMapActivity
 import com.exorcist.app.ui.SonarActivity
 
 class MainActivity : AppCompatActivity() {
@@ -19,8 +19,9 @@ class MainActivity : AppCompatActivity() {
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        binding.btnAR.text = "КАРТА КОМНАТЫ"
         binding.btnAR.setOnClickListener {
-            startActivity(Intent(this, RecorderActivity::class.java))
+            startActivity(Intent(this, RoomMapActivity::class.java))
         }
 
         binding.btnAcoustic.text = "ПАНЕЛЬ КАНАЛОВ"
