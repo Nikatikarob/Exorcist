@@ -108,6 +108,11 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|keyboardHidden"
             android:theme="@style/Theme.Exorcist" />
+         <activity
+            android:name=".ui.RoomMapActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:theme="@style/Theme.Exorcist" />
 
     </application>
 
