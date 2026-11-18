@@ -25,6 +25,7 @@ class SonarFrame(
     val resolutionCm: Float,
     val pingIndex: Int,
     val heard: Boolean,
+    val nearEnergy: Float,
     val status: String
 )
 
@@ -36,9 +37,9 @@ class SonarEngine {
         private const val SPEED = 343.0
     }
 
-    @Volatile var f0: Float = 16000f
+    @Volatile var f0: Float = 15000f
     @Volatile var f1: Float = 20000f
-    @Volatile var durMs: Float = 3f
+    @Volatile var durMs: Float = 12f
     @Volatile var gain: Float = 0.70f
     @Volatile var maxRangeCm: Float = 300f
     @Volatile var intervalMs: Int = 600
@@ -61,9 +62,14 @@ class SonarEngine {
         private set
     var heardCount: Int = 0
         private set
+    var dLagMin: Int = Int.MAX_VALUE
+        private set
+    var dLagMax: Int = Int.MIN_VALUE
+        private set
 
     private var thread: Thread? = null
-    private var avg: FloatArray? = null
+    private var profAvg: FloatArray? = null
+    private var capAcc: FloatArray? = null
 
     private fun buildTemplate(fs: Int): ShortArray {
         val n = max(48, (fs * durMs / 1000f).toInt())
@@ -88,7 +94,10 @@ class SonarEngine {
         heardCount = 0
         bestRange = 0f
         bestConf = 0f
-        avg = null
+        dLagMin = Int.MAX_VALUE
+        dLagMax = Int.MIN_VALUE
+        profAvg = null
+        capAcc = null
 
         var rec: AudioRecord? = null
         var trk: AudioTrack? = null
@@ -147,7 +156,8 @@ class SonarEngine {
         thread = Thread({
             var tpl = buildTemplate(rate)
             var tplF = toFloatTpl(tpl)
-            var tplEnergy = energy(tplF)
+            var tplE = energy(tplF)
+            var tplS2 = tplE * tplE
             var sigF0 = f0; var sigF1 = f1; var sigDur = durMs; var sigGain = gain
 
             val block = 512
@@ -173,12 +183,15 @@ class SonarEngine {
                             sigF0 = f0; sigF1 = f1; sigDur = durMs; sigGain = gain
                             tpl = buildTemplate(rate)
                             tplF = toFloatTpl(tpl)
-                            tplEnergy = energy(tplF)
+                            tplE = energy(tplF)
+                            tplS2 = tplE * tplE
+                            capAcc = null
                         }
+                        val tn = tplF.size
                         directWin = (rate * 0.085).toInt()
                         echoWin = max(64, (rate * 2.0 * (maxRangeCm / 100.0) / SPEED).toInt())
                         guard = max(12, (rate * 0.5 / SPEED).toInt())
-                        capNeed = directWin + guard + echoWin + tplF.size + 64
+                        capNeed = directWin + guard + echoWin + 2 * tn + 64
                         cap = FloatArray(capNeed)
                         capIdx = 0
                         armed = true
@@ -205,7 +218,7 @@ class SonarEngine {
                         capIdx += take
                         if (capIdx >= capNeed) {
                             armed = false
-                            process(cap, tplF, tplEnergy, directWin, echoWin, guard, rate)
+                            process(cap, tplF, tplE, tplS2, directWin, echoWin, guard, rate)
                         }
                     }
                 }
@@ -238,7 +251,8 @@ class SonarEngine {
     private fun process(
         cap: FloatArray,
         tpl: FloatArray,
-        tplEnergy: Double,
+        tplE: Double,
+        tplS2: Double,
         directWin: Int,
         echoWin: Int,
         guard: Int,
@@ -247,73 +261,89 @@ class SonarEngine {
         try {
             val tn = tpl.size
 
-            // Проход 1: прямой путь динамик -> микрофон
+            // Проход 1: прямой путь, со знаком
             var dLag = 0
-            var dVal = 0f
+            var dAbs = 0f
+            var dSigned = 0.0
             for (lag in 0 until directWin) {
                 var s = 0.0
                 val lim = min(tn, cap.size - lag)
                 for (i in 0 until lim) s += cap[lag + i] * tpl[i]
-                val v = (abs(s) / tplEnergy).toFloat()
-                if (v > dVal) { dVal = v; dLag = lag }
+                val v = (abs(s) / tplE).toFloat()
+                if (v > dAbs) { dAbs = v; dLag = lag; dSigned = s }
             }
+            if (dLag < dLagMin) dLagMin = dLag
+            if (dLag > dLagMax) dLagMax = dLag
 
-            // Проход 2: эхо строго после прямого пути
+            // Вычитаем прямой путь, чтобы его хвост не маскировал эхо
+            val amp = dSigned / tplS2
+            val subEnd = min(cap.size, dLag + tn)
+            for (i in dLag until subEnd) cap[i] -= (amp * tpl[i - dLag]).toFloat()
+
+            // Когерентное накопление окна эха, выровненного по dLag
             val echoStart = dLag + guard
-            val echoEnd = min(cap.size - tn, echoStart + echoWin)
-            if (echoEnd <= echoStart + 8) return
-            val span = echoEnd - echoStart
+            val accLen = echoWin + tn
+            if (echoStart + accLen > cap.size) return
+            var acc = capAcc
+            if (acc == null || acc.size != accLen) {
+                acc = FloatArray(accLen)
+                capAcc = acc
+            }
+            for (k in 0 until accLen) acc[k] = acc[k] * 0.5f + cap[echoStart + k] * 0.5f
 
-            val corr = FloatArray(span)
-            for (k in 0 until span) {
-                val lag = echoStart + k
+            // Проход 2: корреляция накопленного окна
+            val corr = FloatArray(echoWin)
+            for (k in 0 until echoWin) {
                 var s = 0.0
-                for (i in 0 until tn) s += cap[lag + i] * tpl[i]
-                corr[k] = (abs(s) / tplEnergy).toFloat()
+                for (i in 0 until tn) s += acc[k + i] * tpl[i]
+                corr[k] = (abs(s) / tplE).toFloat()
             }
 
-            val floor = median(corr, 0, span)
-            val dRatio = dVal / (floor + 1e-9f)
-            val dDb = (20.0 * log10(dVal.toDouble() + 1e-9)).toFloat()
+            val floor = median(corr, 0, echoWin)
+            val dRatio = dAbs / (floor + 1e-9f)
+            val dDb = (20.0 * Math.log10(dAbs.toDouble() + 1e-9)).toFloat()
             val heard = emit && dRatio > 4f
 
             val raw = FloatArray(BINS)
-            for (k in 0 until span) {
-                val b = (k.toLong() * (BINS - 1) / span).toInt().coerceIn(0, BINS - 1)
+            for (k in 0 until echoWin) {
+                val b = (k.toLong() * (BINS - 1) / echoWin).toInt().coerceIn(0, BINS - 1)
                 if (corr[k] > raw[b]) raw[b] = corr[k]
             }
             val rfloor = median(raw, 0, BINS)
 
             val res = FloatArray(BINS)
+            for (b in 0 until BINS) {
+                val rangeM = b.toDouble() / (BINS - 1) * (echoWin.toDouble() / fs) * SPEED / 2.0
+                val comp = (1.0 + 0.8 * rangeM).toFloat()
+                res[b] = max(0f, raw[b] - rfloor) * comp
+            }
+
+            if (heard) {
+                var pa = profAvg
+                if (pa == null || pa.size != BINS) { pa = FloatArray(BINS); profAvg = pa }
+                for (b in 0 until BINS) pa[b] = pa[b] * 0.65f + res[b] * 0.35f
+            }
+            val src = if (heard) (profAvg ?: res) else res
+            var mx = 1e-9f
+            for (v in src) if (v > mx) mx = v
+            val disp = FloatArray(BINS)
+            for (b in 0 until BINS) disp[b] = src[b] / mx
+
             var pk = 0
             var pv = 0f
-            for (b in 0 until BINS) {
-                val rangeM = b.toDouble() / (BINS - 1) * (span.toDouble() / fs) * SPEED / 2.0
-                val comp = (1.0 + 0.8 * rangeM).toFloat()
-                val v = max(0f, raw[b] - rfloor) * comp
-                res[b] = v
-                if (v > pv) { pv = v; pk = b }
-            }
+            for (b in 0 until BINS) if (disp[b] > pv) { pv = disp[b]; pk = b }
 
-            // Когерентное усреднение: стена даёт устойчивую полосу
-            if (heard) {
-                var a = avg
-                if (a == null || a.size != BINS) { a = FloatArray(BINS); avg = a }
-                for (b in 0 until BINS) a[b] = a[b] * 0.65f + res[b] * 0.35f
-            }
-            val disp = if (heard) (avg ?: res).copyOf() else res.copyOf()
-
-            var mx = 1e-9f
-            for (v in disp) if (v > mx) mx = v
-            for (b in 0 until BINS) disp[b] = disp[b] / mx
-
-            var pk2 = 0
-            var pv2 = 0f
-            for (b in 0 until BINS) if (disp[b] > pv2) { pv2 = disp[b]; pk2 = b }
-
-            val rangeCm = (pk2.toDouble() / (BINS - 1) * (span.toDouble() / fs) * SPEED / 2.0 * 100.0).toFloat()
+            val rangeCm = (pk.toDouble() / (BINS - 1) * (echoWin.toDouble() / fs) * SPEED / 2.0 * 100.0).toFloat()
             val snr = raw[pk] / (rfloor + 1e-9f)
-            val conf = ((snr - 3f) / 12f).coerceIn(0f, 1f)
+            val conf = ((snr - 3f) / 10f).coerceIn(0f, 1f)
+
+            // Энергия ближней зоны 20-120 см: рабочий режим даже без точной дальности
+            val cmPerBin = maxRangeCm / (BINS - 1f)
+            val b0 = (20f / cmPerBin).toInt().coerceIn(0, BINS - 1)
+            val b1 = (120f / cmPerBin).toInt().coerceIn(b0 + 1, BINS)
+            var ne = 0f
+            for (b in b0 until b1) ne += disp[b]
+            val near = ne / (b1 - b0)
 
             if (heard) {
                 heardCount++
@@ -325,13 +355,13 @@ class SonarEngine {
 
             val status = when {
                 !emit -> "ИЗЛУЧЕНИЕ ВЫКЛЮЧЕНО · только приём"
-                dRatio < 4f -> "ПОСЫЛКА СЛАБАЯ ×" + String.format(java.util.Locale.US, "%.1f", dRatio) + " · подними уровень или опусти частоту"
-                conf > 0.5f -> "ЦЕЛЬ УВЕРЕННАЯ · " + rangeCm.toInt() + " см"
-                conf > 0.25f -> "ЦЕЛЬ СЛАБАЯ · " + rangeCm.toInt() + " см"
-                else -> "ЭХО НЕ ВЫДЕЛЯЕТСЯ · подойди ближе к стене"
+                dRatio < 4f -> "ПОСЫЛКА СЛАБАЯ ×" + String.format(java.util.Locale.US, "%.1f", dRatio)
+                conf > 0.5f -> "ЦЕЛЬ · " + rangeCm.toInt() + " см"
+                else -> "БЛИЖНЯЯ ЗОНА 20–120 см: " + String.format(java.util.Locale.US, "%.2f", near) +
+                        " · води телефоном, следи за ростом"
             }
 
-            latest = SonarFrame(fs, disp, rangeCm, conf, snr, dVal, dRatio, dDb, resCm, pings, heard, status)
+            latest = SonarFrame(fs, disp, rangeCm, conf, snr, dAbs, dRatio, dDb, resCm, pings, heard, near, status)
         } catch (e: Exception) {
             Log.e(TAG, "process", e)
         }
@@ -351,12 +381,17 @@ class SonarEngine {
                 "–" + String.format(java.util.Locale.US, "%.1f", f1 / 1000) + " кГц · " + durMs + " мс · gain " + gain)
         sb.appendLine("Посылок " + pings + " · услышано " + heardCount)
         sb.appendLine("Лучшая цель: " + bestRange.toInt() + " см при уверенности " + (bestConf * 100).toInt() + "%")
+        val jit = if (dLagMin == Int.MAX_VALUE) "—" else (dLagMax - dLagMin).toString()
+        sb.appendLine("Разброс dLag: " + jit + " отсчётов (мин " +
+                (if (dLagMin == Int.MAX_VALUE) 0 else dLagMin) + ", макс " +
+                (if (dLagMax == Int.MIN_VALUE) 0 else dLagMax) + ")")
         val f = latest ?: return sb.toString() + "нет кадра\n"
         sb.appendLine("Разрешение: " + String.format(java.util.Locale.US, "%.1f", f.resolutionCm) + " см")
         sb.appendLine("Прямой путь: " + String.format(java.util.Locale.US, "%.1f", f.directDb) + " dB · ×" +
-                String.format(java.util.Locale.US, "%.1f", f.directRatio) + " к шуму")
+                String.format(java.util.Locale.US, "%.1f", f.directRatio))
         sb.appendLine("Эхо: " + f.rangeCm.toInt() + " см · SNR " + String.format(java.util.Locale.US, "%.1f", f.snr) +
                 " · уверенность " + (f.confidence * 100).toInt() + "%")
+        sb.appendLine("Ближняя зона 20–120 см: " + String.format(java.util.Locale.US, "%.3f", f.nearEnergy))
         sb.appendLine("Статус: " + f.status)
         sb.appendLine("Профиль (см : амплитуда):")
         val step = BINS / 24
@@ -366,8 +401,6 @@ class SonarEngine {
         }
         return sb.toString()
     }
-
-    private fun log10(v: Double): Double = Math.log10(v)
 
     private fun median(a: FloatArray, from: Int, to: Int): Float {
         val n = to - from
