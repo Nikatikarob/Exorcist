@@ -38,8 +38,21 @@ class SonarActivity : AppCompatActivity() {
         setContentView(b.root)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        wire(b.sbF0) { engine.f0 = 14000f + it * 100f; syncLabels() }
-        wire(b.sbF1) { engine.f1 = 20000f + it * 100f; syncLabels() }
+        b.sbF0.max = 60
+        b.sbF0.progress = 16
+        b.sbF1.max = 35
+        b.sbF1.progress = 24
+        b.sbDur.max = 14
+        b.sbDur.progress = 4
+        b.sbGain.max = 75
+        b.sbGain.progress = 65
+        b.sbRange.max = 40
+        b.sbRange.progress = 20
+        b.sbInt.max = 24
+        b.sbInt.progress = 6
+
+        wire(b.sbF0) { engine.f0 = 12000f + it * 250f; syncLabels() }
+        wire(b.sbF1) { engine.f1 = 14000f + it * 250f; syncLabels() }
         wire(b.sbDur) { engine.durMs = 1f + it * 0.5f; syncLabels() }
         wire(b.sbGain) { engine.gain = 0.05f + it * 0.01f; syncLabels() }
         wire(b.sbRange) { engine.maxRangeCm = 100f + it * 10f; syncLabels() }
@@ -68,8 +81,8 @@ class SonarActivity : AppCompatActivity() {
     }
 
     private fun syncLabels() {
-        b.lblF0.text = "Chirp f₀ · " + String.format(Locale.US, "%.1f", engine.f0 / 1000) + " кГц"
-        b.lblF1.text = "Chirp f₁ · " + String.format(Locale.US, "%.1f", engine.f1 / 1000) + " кГц"
+        b.lblF0.text = "Chirp f₀ · " + String.format(Locale.US, "%.2f", engine.f0 / 1000) + " кГц"
+        b.lblF1.text = "Chirp f₁ · " + String.format(Locale.US, "%.2f", engine.f1 / 1000) + " кГц"
         b.lblDur.text = "Длительность · " + String.format(Locale.US, "%.1f", engine.durMs) + " мс"
         b.lblGain.text = "Уровень посылки · " + String.format(Locale.US, "%.2f", engine.gain)
         b.lblRange.text = "Макс. дальность · " + engine.maxRangeCm.toInt() + " см"
@@ -132,9 +145,10 @@ class SonarActivity : AppCompatActivity() {
         )
         b.tvRange.text = if (f.heard) f.rangeCm.toInt().toString() + " см" else "— см"
         b.tvConf.text = (f.confidence * 100).toInt().toString() + " %"
-        b.tvDiag.text = "прямой путь ×" + String.format(Locale.US, "%.1f", f.directRatio) +
+        b.tvDiag.text = "прямой ×" + String.format(Locale.US, "%.1f", f.directRatio) +
+                " (" + String.format(Locale.US, "%.0f", f.directDb) + " dB)" +
                 " · SNR " + String.format(Locale.US, "%.1f", f.snr) +
-                " · разрешение " + String.format(Locale.US, "%.1f", f.resolutionCm) + " см" +
+                " · разр. " + String.format(Locale.US, "%.1f", f.resolutionCm) + " см" +
                 " · посылок " + f.pingIndex
     }
 
