@@ -88,12 +88,15 @@ class PdrEngine(context: Context) : SensorEventListener {
         val topH = hypot(topE, topN)
         val backH = hypot(backE, backN)
 
-        val h = if (topH >= backH) atan2(topE, topN) else atan2(backE, backN)
+        val h = if (topH >= backH) atan2(topE.toDouble(), topN.toDouble()) else atan2(backE.toDouble(), backN.toDouble())
 
-        var diff = h - headingRad
-        while (diff > Math.PI) diff -= 2.0 * Math.PI
-        while (diff < -Math.PI) diff += 2.0 * Math.PI
-        headingRad = (headingRad + 0.25f * diff).toFloat()
+        var diff = (h - headingRad).toFloat()
+        val piF = Math.PI.toFloat()
+        while (diff > piF) diff -= 2f * piF
+        while (diff < -piF) diff += 2f * piF
+        
+        headingRad = headingRad + 0.25f * diff
+        
         var deg = Math.toDegrees(headingRad.toDouble()).toFloat()
         if (deg < 0f) deg += 360f
         headingDeg = deg
