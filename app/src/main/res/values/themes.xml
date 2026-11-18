@@ -22,4 +22,19 @@
         <item name="android:paddingBottom">6dp</item>
         <item name="android:layout_marginEnd">2dp</item>
     </style>
+
+    <style name="SonarLbl">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textSize">14sp</item>
+        <item name="android:textColor">#00E5C0</item>
+        <item name="android:layout_marginTop">6dp</item>
+    </style>
+
+    <style name="SonarSeek">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:minHeight">28dp</item>
+    </style>
 </resources>
