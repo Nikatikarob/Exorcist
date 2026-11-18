@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#070C11"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.14"
+        android:text="КАРТА КОМНАТЫ"
+        android:textColor="#00E5C0"
+        android:textSize="20sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/tvStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:fontFamily="monospace"
+        android:gravity="center"
+        android:text="ДЕРЖИ ТЕЛЕФОН ПЛОСКО ИЛИ ВЕРТИКАЛЬНО · ОДИН ХВАТ"
+        android:textColor="#FFB020"
+        android:textSize="13sp"
+        android:textStyle="bold" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/tvSteps" style="@style/MapCell" android:text="шаги 0" />
+        <TextView android:id="@+id/tvHead" style="@style/MapCell" android:text="курс —" />
+        <TextView android:id="@+id/tvMag" style="@style/MapCell" android:text="маг 0.0" />
+        <TextView android:id="@+id/tvTone" style="@style/MapCell" android:text="тон —" />
+    </LinearLayout>
+
+    <com.exorcist.app.ui.RoomMapView
+        android:id="@+id/mapView"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:layout_marginTop="8dp" />
+
+    <TextView android:id="@+id/lblStride" style="@style/SonarLbl" android:text="Длина шага" />
+    <SeekBar android:id="@+id/sbStride" style="@style/SonarSeek" android:max="60" android:progress="25" />
+
+    <TextView android:id="@+id/lblThr" style="@style/SonarLbl" android:text="Порог магнитной метки" />
+    <SeekBar android:id="@+id/sbThr" style="@style/SonarSeek" android:max="60" android:progress="20" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnToggle"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:text="СТАРТ"
+            android:textColor="#7CFF3D"
+            android:textSize="16sp"
+            app:strokeColor="#7CFF3D" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnCopy"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_marginStart="8dp"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:text="КОПИРОВАТЬ"
+            android:textColor="#00E5C0"
+            android:textSize="16sp"
+            app:strokeColor="#00E5C0" />
+    </LinearLayout>
+
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnBack"
+        style="@style/Widget.MaterialComponents.Button.TextButton"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:fontFamily="monospace"
+        android:text="← В МЕНЮ"
+        android:textColor="#7E93A3"
+        android:textSize="15sp" />
+
+</LinearLayout>
