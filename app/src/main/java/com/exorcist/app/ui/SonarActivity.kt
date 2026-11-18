@@ -39,11 +39,11 @@ class SonarActivity : AppCompatActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         b.sbF0.max = 60
-        b.sbF0.progress = 16
+        b.sbF0.progress = 12
         b.sbF1.max = 35
         b.sbF1.progress = 24
-        b.sbDur.max = 14
-        b.sbDur.progress = 4
+        b.sbDur.max = 46
+        b.sbDur.progress = 22
         b.sbGain.max = 75
         b.sbGain.progress = 65
         b.sbRange.max = 40
@@ -143,13 +143,13 @@ class SonarActivity : AppCompatActivity() {
                 }
             )
         )
-        b.tvRange.text = if (f.heard) f.rangeCm.toInt().toString() + " см" else "— см"
+        b.tvRange.text = if (f.heard && f.confidence > 0.25f) f.rangeCm.toInt().toString() + " см" else "— см"
         b.tvConf.text = (f.confidence * 100).toInt().toString() + " %"
         b.tvDiag.text = "прямой ×" + String.format(Locale.US, "%.1f", f.directRatio) +
                 " (" + String.format(Locale.US, "%.0f", f.directDb) + " dB)" +
                 " · SNR " + String.format(Locale.US, "%.1f", f.snr) +
-                " · разр. " + String.format(Locale.US, "%.1f", f.resolutionCm) + " см" +
-                " · посылок " + f.pingIndex
+                " · ближняя " + String.format(Locale.US, "%.2f", f.nearEnergy) +
+                " · разр. " + String.format(Locale.US, "%.1f", f.resolutionCm) + " см"
     }
 
     private fun copy() {
