@@ -35,6 +35,7 @@ class SonarEngine {
         private const val TAG = "SonarEngine"
         private const val BINS = 240
         private const val SPEED = 343.0
+        private const val BLOCK = 512
     }
 
     @Volatile var f0: Float = 15000f
@@ -62,9 +63,13 @@ class SonarEngine {
         private set
     var heardCount: Int = 0
         private set
-    var dLagMin: Int = Int.MAX_VALUE
+    var accepted: Int = 0
         private set
-    var dLagMax: Int = Int.MIN_VALUE
+    var rejected: Int = 0
+        private set
+    var dLagMedian: Int = 0
+        private set
+    var dLagSpreadAcc: Int = 0
         private set
 
     private var thread: Thread? = null
@@ -90,14 +95,10 @@ class SonarEngine {
     fun start(): Boolean {
         if (running) return true
         errorText = ""
-        pings = 0
-        heardCount = 0
-        bestRange = 0f
-        bestConf = 0f
-        dLagMin = Int.MAX_VALUE
-        dLagMax = Int.MIN_VALUE
-        profAvg = null
-        capAcc = null
+        pings = 0; heardCount = 0; accepted = 0; rejected = 0
+        bestRange = 0f; bestConf = 0f
+        dLagMedian = 0; dLagSpreadAcc = 0
+        profAvg = null; capAcc = null
 
         var rec: AudioRecord? = null
         var trk: AudioTrack? = null
@@ -132,7 +133,7 @@ class SonarEngine {
                             .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                             .build()
                     )
-                    .setBufferSizeInBytes(max(minOut, 8192))
+                    .setBufferSizeInBytes(max(minOut, 2048))
                     .setTransferMode(AudioTrack.MODE_STREAM)
                     .build()
                 if (t.state != AudioTrack.STATE_INITIALIZED) { r.release(); t.release(); continue }
@@ -160,65 +161,79 @@ class SonarEngine {
             var tplS2 = tplE * tplE
             var sigF0 = f0; var sigF1 = f1; var sigDur = durMs; var sigGain = gain
 
-            val block = 512
-            val buf = ShortArray(block)
+            val outBlock = ShortArray(BLOCK)
+            val inBlock = ShortArray(BLOCK)
+            var pingQueue: ShortArray? = null
+            var pingOff = 0
+            var blockCount = 0L
+            var blocksPerPing = max(4L, (intervalMs.toDouble() / (BLOCK * 1000.0 / rate)).toLong())
+
             var cap = FloatArray(0)
             var capIdx = 0
             var capNeed = 0
             var directWin = 0
             var echoWin = 0
             var guard = 0
-            var armed = false
-            var lastPing = 0L
+            var capturing = false
+
+            val dLags = ArrayList<Int>(8)
 
             try {
                 r.startRecording()
                 t.play()
 
                 while (running) {
-                    val now = System.currentTimeMillis()
+                    if (f0 != sigF0 || f1 != sigF1 || durMs != sigDur || gain != sigGain) {
+                        sigF0 = f0; sigF1 = f1; sigDur = durMs; sigGain = gain
+                        tpl = buildTemplate(rate)
+                        tplF = toFloatTpl(tpl)
+                        tplE = energy(tplF)
+                        tplS2 = tplE * tplE
+                        capAcc = null
+                        profAvg = null
+                        dLags.clear()
+                    }
 
-                    if (!armed && now - lastPing >= intervalMs) {
-                        if (f0 != sigF0 || f1 != sigF1 || durMs != sigDur || gain != sigGain) {
-                            sigF0 = f0; sigF1 = f1; sigDur = durMs; sigGain = gain
-                            tpl = buildTemplate(rate)
-                            tplF = toFloatTpl(tpl)
-                            tplE = energy(tplF)
-                            tplS2 = tplE * tplE
-                            capAcc = null
-                        }
+                    if (pingQueue == null && emit && blockCount % blocksPerPing == 0L) {
+                        pingQueue = tpl
+                        pingOff = 0
                         val tn = tplF.size
                         directWin = (rate * 0.085).toInt()
                         echoWin = max(64, (rate * 2.0 * (maxRangeCm / 100.0) / SPEED).toInt())
-                        guard = max(12, (rate * 0.5 / SPEED).toInt())
+                        guard = max(8, (rate * 0.30 / SPEED).toInt())
                         capNeed = directWin + guard + echoWin + 2 * tn + 64
                         cap = FloatArray(capNeed)
                         capIdx = 0
-                        armed = true
-                        lastPing = now
-
-                        if (emit) {
-                            try {
-                                val w = t.write(tpl, 0, tpl.size)
-                                if (w < tpl.size) Log.w(TAG, "short write $w/${tpl.size}")
-                                if (t.playState != AudioTrack.PLAYSTATE_PLAYING) t.play()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "write", e)
-                            }
-                        }
+                        capturing = true
                         pings++
                     }
 
-                    val got = r.read(buf, 0, block)
+                    for (i in 0 until BLOCK) {
+                        val q = pingQueue
+                        if (q != null) {
+                            outBlock[i] = q[pingOff++]
+                            if (pingOff >= q.size) { pingQueue = null; pingOff = 0 }
+                        } else {
+                            outBlock[i] = 0
+                        }
+                    }
+                    try {
+                        t.write(outBlock, 0, BLOCK)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "write", e)
+                    }
+
+                    val got = r.read(inBlock, 0, BLOCK)
+                    blockCount++
                     if (got <= 0) continue
 
-                    if (armed) {
+                    if (capturing) {
                         val take = min(got, capNeed - capIdx)
-                        for (i in 0 until take) cap[capIdx + i] = buf[i].toFloat() / 32768f
+                        for (i in 0 until take) cap[capIdx + i] = inBlock[i].toFloat() / 32768f
                         capIdx += take
                         if (capIdx >= capNeed) {
-                            armed = false
-                            process(cap, tplF, tplE, tplS2, directWin, echoWin, guard, rate)
+                            capturing = false
+                            process(cap, tplF, tplE, tplS2, directWin, echoWin, guard, rate, dLags)
                         }
                     }
                 }
@@ -256,12 +271,12 @@ class SonarEngine {
         directWin: Int,
         echoWin: Int,
         guard: Int,
-        fs: Int
+        fs: Int,
+        dLags: ArrayList<Int>
     ) {
         try {
             val tn = tpl.size
 
-            // Проход 1: прямой путь, со знаком
             var dLag = 0
             var dAbs = 0f
             var dSigned = 0.0
@@ -272,15 +287,30 @@ class SonarEngine {
                 val v = (abs(s) / tplE).toFloat()
                 if (v > dAbs) { dAbs = v; dLag = lag; dSigned = s }
             }
-            if (dLag < dLagMin) dLagMin = dLag
-            if (dLag > dLagMax) dLagMax = dLag
 
-            // Вычитаем прямой путь, чтобы его хвост не маскировал эхо
+            // Отсев брака: якорь должен быть близок к медиане последних
+            var gateOk = true
+            if (dLags.size >= 3) {
+                val sorted = dLags.sorted()
+                val med = sorted[sorted.size / 2]
+                gateOk = abs(dLag - med) <= 96
+                dLagMedian = med
+                var sp = 0
+                for (v in sorted) sp = max(sp, abs(v - med))
+                dLagSpreadAcc = sp
+            }
+            if (gateOk) {
+                dLags.add(dLag)
+                if (dLags.size > 8) dLags.removeAt(0)
+                accepted++
+            } else {
+                rejected++
+            }
+
             val amp = dSigned / tplS2
             val subEnd = min(cap.size, dLag + tn)
             for (i in dLag until subEnd) cap[i] -= (amp * tpl[i - dLag]).toFloat()
 
-            // Когерентное накопление окна эха, выровненного по dLag
             val echoStart = dLag + guard
             val accLen = echoWin + tn
             if (echoStart + accLen > cap.size) return
@@ -289,9 +319,10 @@ class SonarEngine {
                 acc = FloatArray(accLen)
                 capAcc = acc
             }
-            for (k in 0 until accLen) acc[k] = acc[k] * 0.5f + cap[echoStart + k] * 0.5f
+            if (gateOk) {
+                for (k in 0 until accLen) acc[k] = acc[k] * 0.5f + cap[echoStart + k] * 0.5f
+            }
 
-            // Проход 2: корреляция накопленного окна
             val corr = FloatArray(echoWin)
             for (k in 0 until echoWin) {
                 var s = 0.0
@@ -302,7 +333,7 @@ class SonarEngine {
             val floor = median(corr, 0, echoWin)
             val dRatio = dAbs / (floor + 1e-9f)
             val dDb = (20.0 * Math.log10(dAbs.toDouble() + 1e-9)).toFloat()
-            val heard = emit && dRatio > 4f
+            val heard = emit && dRatio > 4f && gateOk
 
             val raw = FloatArray(BINS)
             for (k in 0 until echoWin) {
@@ -337,7 +368,6 @@ class SonarEngine {
             val snr = raw[pk] / (rfloor + 1e-9f)
             val conf = ((snr - 3f) / 10f).coerceIn(0f, 1f)
 
-            // Энергия ближней зоны 20-120 см: рабочий режим даже без точной дальности
             val cmPerBin = maxRangeCm / (BINS - 1f)
             val b0 = (20f / cmPerBin).toInt().coerceIn(0, BINS - 1)
             val b1 = (120f / cmPerBin).toInt().coerceIn(b0 + 1, BINS)
@@ -356,6 +386,7 @@ class SonarEngine {
             val status = when {
                 !emit -> "ИЗЛУЧЕНИЕ ВЫКЛЮЧЕНО · только приём"
                 dRatio < 4f -> "ПОСЫЛКА СЛАБАЯ ×" + String.format(java.util.Locale.US, "%.1f", dRatio)
+                !gateOk -> "ЯКОРЬ СБИЛСЯ · посылка отброшена"
                 conf > 0.5f -> "ЦЕЛЬ · " + rangeCm.toInt() + " см"
                 else -> "БЛИЖНЯЯ ЗОНА 20–120 см: " + String.format(java.util.Locale.US, "%.2f", near) +
                         " · води телефоном, следи за ростом"
@@ -379,12 +410,9 @@ class SonarEngine {
         sb.appendLine("=== СОНАР ===")
         sb.appendLine("fs " + actualRate + " Гц · chirp " + String.format(java.util.Locale.US, "%.1f", f0 / 1000) +
                 "–" + String.format(java.util.Locale.US, "%.1f", f1 / 1000) + " кГц · " + durMs + " мс · gain " + gain)
-        sb.appendLine("Посылок " + pings + " · услышано " + heardCount)
+        sb.appendLine("Посылок " + pings + " · принято " + accepted + " · отброшено " + rejected)
+        sb.appendLine("Медиана dLag " + dLagMedian + " · разброс принятых " + dLagSpreadAcc + " отсчётов")
         sb.appendLine("Лучшая цель: " + bestRange.toInt() + " см при уверенности " + (bestConf * 100).toInt() + "%")
-        val jit = if (dLagMin == Int.MAX_VALUE) "—" else (dLagMax - dLagMin).toString()
-        sb.appendLine("Разброс dLag: " + jit + " отсчётов (мин " +
-                (if (dLagMin == Int.MAX_VALUE) 0 else dLagMin) + ", макс " +
-                (if (dLagMax == Int.MIN_VALUE) 0 else dLagMax) + ")")
         val f = latest ?: return sb.toString() + "нет кадра\n"
         sb.appendLine("Разрешение: " + String.format(java.util.Locale.US, "%.1f", f.resolutionCm) + " см")
         sb.appendLine("Прямой путь: " + String.format(java.util.Locale.US, "%.1f", f.directDb) + " dB · ×" +
