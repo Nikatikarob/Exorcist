@@ -6,6 +6,8 @@ import android.media.AudioRecord
 import android.media.AudioTrack
 import android.media.MediaRecorder
 import android.util.Log
+import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlin.math.cos
 import kotlin.math.max
@@ -71,10 +73,24 @@ class SonarEngine {
         private set
     var dLagSpreadAcc: Int = 0
         private set
+    var maxLoopGapMs: Float = 0f
+        private set
 
-    private var thread: Thread? = null
+    private var ioThread: Thread? = null
+    private var workThread: Thread? = null
     private var profAvg: FloatArray? = null
     private var capAcc: FloatArray? = null
+
+    private class Job(
+        val cap: FloatArray,
+        val tpl: FloatArray,
+        val tplE: Double,
+        val tplS2: Double,
+        val directWin: Int,
+        val echoWin: Int,
+        val guard: Int,
+        val fs: Int
+    )
 
     private fun buildTemplate(fs: Int): ShortArray {
         val n = max(48, (fs * durMs / 1000f).toInt())
@@ -97,7 +113,7 @@ class SonarEngine {
         errorText = ""
         pings = 0; heardCount = 0; accepted = 0; rejected = 0
         bestRange = 0f; bestConf = 0f
-        dLagMedian = 0; dLagSpreadAcc = 0
+        dLagMedian = 0; dLagSpreadAcc = 0; maxLoopGapMs = 0f
         profAvg = null; capAcc = null
 
         var rec: AudioRecord? = null
@@ -133,7 +149,7 @@ class SonarEngine {
                             .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
                             .build()
                     )
-                    .setBufferSizeInBytes(max(minOut, 2048))
+                    .setBufferSizeInBytes(max(minOut, 16384))
                     .setTransferMode(AudioTrack.MODE_STREAM)
                     .build()
                 if (t.state != AudioTrack.STATE_INITIALIZED) { r.release(); t.release(); continue }
@@ -153,8 +169,21 @@ class SonarEngine {
         val r = rec
         val t = trk
         val rate = fs
+        val queue = ArrayBlockingQueue<Job>(2)
 
-        thread = Thread({
+        workThread = Thread({
+            val dLags = ArrayList<Int>(8)
+            while (running || queue.isNotEmpty()) {
+                val job = try {
+                    queue.poll(200, TimeUnit.MILLISECONDS)
+                } catch (e: InterruptedException) {
+                    null
+                }
+                if (job != null) process(job, dLags)
+            }
+        }, "SonarWorker").apply { start() }
+
+        ioThread = Thread({
             var tpl = buildTemplate(rate)
             var tplF = toFloatTpl(tpl)
             var tplE = energy(tplF)
@@ -166,7 +195,7 @@ class SonarEngine {
             var pingQueue: ShortArray? = null
             var pingOff = 0
             var blockCount = 0L
-            var blocksPerPing = max(4L, (intervalMs.toDouble() / (BLOCK * 1000.0 / rate)).toLong())
+            val blocksPerPing = max(4L, (intervalMs.toDouble() / (BLOCK * 1000.0 / rate)).toLong())
 
             var cap = FloatArray(0)
             var capIdx = 0
@@ -175,14 +204,21 @@ class SonarEngine {
             var echoWin = 0
             var guard = 0
             var capturing = false
-
-            val dLags = ArrayList<Int>(8)
+            var lastLoopNs = System.nanoTime()
 
             try {
                 r.startRecording()
+
+                // Предзаполнение: запас тишины, поглощающий любые приостановы
+                val silence = ShortArray(BLOCK)
+                for (i in 0 until 6) t.write(silence, 0, BLOCK)
                 t.play()
 
                 while (running) {
+                    val gapMs = (System.nanoTime() - lastLoopNs) / 1e6f
+                    lastLoopNs = System.nanoTime()
+                    if (gapMs > maxLoopGapMs) maxLoopGapMs = gapMs
+
                     if (f0 != sigF0 || f1 != sigF1 || durMs != sigDur || gain != sigGain) {
                         sigF0 = f0; sigF1 = f1; sigDur = durMs; sigGain = gain
                         tpl = buildTemplate(rate)
@@ -191,7 +227,6 @@ class SonarEngine {
                         tplS2 = tplE * tplE
                         capAcc = null
                         profAvg = null
-                        dLags.clear()
                     }
 
                     if (pingQueue == null && emit && blockCount % blocksPerPing == 0L) {
@@ -233,7 +268,8 @@ class SonarEngine {
                         capIdx += take
                         if (capIdx >= capNeed) {
                             capturing = false
-                            process(cap, tplF, tplE, tplS2, directWin, echoWin, guard, rate, dLags)
+                            val job = Job(cap, tplF, tplE, tplS2, directWin, echoWin, guard, rate)
+                            if (!queue.offer(job)) rejected++
                         }
                     }
                 }
@@ -246,7 +282,7 @@ class SonarEngine {
                 try { t.stop() } catch (e: Exception) {}
                 try { t.release() } catch (e: Exception) {}
             }
-        }, "SonarEngine").apply { start() }
+        }, "SonarIO").apply { start() }
 
         return true
     }
@@ -263,18 +299,16 @@ class SonarEngine {
         return sqrt(max(e, 1e-12))
     }
 
-    private fun process(
-        cap: FloatArray,
-        tpl: FloatArray,
-        tplE: Double,
-        tplS2: Double,
-        directWin: Int,
-        echoWin: Int,
-        guard: Int,
-        fs: Int,
-        dLags: ArrayList<Int>
-    ) {
+    private fun process(job: Job, dLags: ArrayList<Int>) {
         try {
+            val cap = job.cap
+            val tpl = job.tpl
+            val tplE = job.tplE
+            val tplS2 = job.tplS2
+            val directWin = job.directWin
+            val echoWin = job.echoWin
+            val guard = job.guard
+            val fs = job.fs
             val tn = tpl.size
 
             var dLag = 0
@@ -288,12 +322,11 @@ class SonarEngine {
                 if (v > dAbs) { dAbs = v; dLag = lag; dSigned = s }
             }
 
-            // Отсев брака: якорь должен быть близок к медиане последних
             var gateOk = true
             if (dLags.size >= 3) {
                 val sorted = dLags.sorted()
                 val med = sorted[sorted.size / 2]
-                gateOk = abs(dLag - med) <= 96
+                gateOk = abs(dLag - med) <= 160
                 dLagMedian = med
                 var sp = 0
                 for (v in sorted) sp = max(sp, abs(v - med))
@@ -400,8 +433,10 @@ class SonarEngine {
 
     fun stop() {
         running = false
-        try { thread?.join(700) } catch (e: InterruptedException) {}
-        thread = null
+        try { ioThread?.join(700) } catch (e: InterruptedException) {}
+        try { workThread?.join(700) } catch (e: InterruptedException) {}
+        ioThread = null
+        workThread = null
         latest = null
     }
 
@@ -412,6 +447,8 @@ class SonarEngine {
                 "–" + String.format(java.util.Locale.US, "%.1f", f1 / 1000) + " кГц · " + durMs + " мс · gain " + gain)
         sb.appendLine("Посылок " + pings + " · принято " + accepted + " · отброшено " + rejected)
         sb.appendLine("Медиана dLag " + dLagMedian + " · разброс принятых " + dLagSpreadAcc + " отсчётов")
+        sb.appendLine("Макс. зазор цикла: " + String.format(java.util.Locale.US, "%.1f", maxLoopGapMs) +
+                " мс (норма около 11, всё что выше — простой ввода-вывода)")
         sb.appendLine("Лучшая цель: " + bestRange.toInt() + " см при уверенности " + (bestConf * 100).toInt() + "%")
         val f = latest ?: return sb.toString() + "нет кадра\n"
         sb.appendLine("Разрешение: " + String.format(java.util.Locale.US, "%.1f", f.resolutionCm) + " см")
