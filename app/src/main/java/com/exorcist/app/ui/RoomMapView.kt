@@ -10,8 +10,10 @@ import android.util.AttributeSet
 import android.view.View
 import com.exorcist.app.core.MapMark
 import com.exorcist.app.core.PdrEngine
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sin
 
 class RoomMapView @JvmOverloads constructor(
     context: Context, attrs: AttributeSet? = null, defStyle: Int = 0
