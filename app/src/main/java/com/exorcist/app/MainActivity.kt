@@ -8,6 +8,7 @@ import com.exorcist.app.databinding.ActivityMainBinding
 import com.exorcist.app.ui.EMFGuideActivity
 import com.exorcist.app.ui.ProbeActivity
 import com.exorcist.app.ui.RecorderActivity
+import com.exorcist.app.ui.SonarActivity
 
 class MainActivity : AppCompatActivity() {
 
@@ -27,8 +28,9 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, ProbeActivity::class.java))
         }
 
+        binding.btnMap.text = "ЭХО-СОНАР"
         binding.btnMap.setOnClickListener {
-            Toast.makeText(this, "Раздел в разработке", Toast.LENGTH_SHORT).show()
+            startActivity(Intent(this, SonarActivity::class.java))
         }
 
         binding.btnEMF.setOnClickListener {
