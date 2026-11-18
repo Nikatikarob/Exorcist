@@ -42,6 +42,20 @@ class PdrEngine(context: Context) : SensorEventListener {
     val path = ArrayList<Pair<Float, Float>>()
     val marks = ArrayList<MapMark>()
 
+    // Диагностика
+    var stepRegistered = false
+        private set
+    var rotRegistered = false
+        private set
+    var magRegistered = false
+        private set
+    var stepEvents = 0
+        private set
+    var rotEvents = 0
+        private set
+    var magEvents = 0
+        private set
+
     private var headingRad = 0f
     private var baseMag = Float.NaN
     private var devSince = 0L
@@ -54,11 +68,13 @@ class PdrEngine(context: Context) : SensorEventListener {
         headingRad = 0f; headingDeg = 0f
         baseMag = Float.NaN; devSince = 0L
         lastMarkMag = 0L; lastMarkTone = 0L
+        stepEvents = 0; rotEvents = 0; magEvents = 0
         synchronized(path) { path.clear(); path.add(Pair(0f, 0f)) }
         synchronized(marks) { marks.clear() }
-        stepSensor?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST) }
-        rotSensor?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
-        magSensor?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+        
+        stepRegistered = stepSensor?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_FASTEST) } ?: false
+        rotRegistered = rotSensor?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) } ?: false
+        magRegistered = magSensor?.let { sm.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) } ?: false
     }
 
     fun stop() {
@@ -68,9 +84,9 @@ class PdrEngine(context: Context) : SensorEventListener {
     override fun onSensorChanged(e: SensorEvent?) {
         val ev = e ?: return
         when (ev.sensor.type) {
-            Sensor.TYPE_GAME_ROTATION_VECTOR -> updateHeading(ev.values)
-            Sensor.TYPE_STEP_DETECTOR -> onStep()
-            Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED -> onMag(ev.values)
+            Sensor.TYPE_GAME_ROTATION_VECTOR -> { rotEvents++; updateHeading(ev.values) }
+            Sensor.TYPE_STEP_DETECTOR -> { stepEvents++; onStep() }
+            Sensor.TYPE_MAGNETIC_FIELD_UNCALIBRATED -> { magEvents++; onMag(ev.values) }
         }
     }
 
@@ -161,6 +177,10 @@ class PdrEngine(context: Context) : SensorEventListener {
         sb.appendLine("=== КАРТА КОМНАТЫ ===")
         sb.appendLine("Шагов: " + steps + " · длина пути: " +
                 String.format(java.util.Locale.US, "%.1f", pathLengthM()) + " м · шаг " + strideM + " м")
+        sb.appendLine("Регистрация: шаг=" + (if (stepRegistered) "OK" else "ОТКАЗ/НЕТ") + 
+                " курс=" + (if (rotRegistered) "OK" else "ОТКАЗ/НЕТ") + 
+                " маг=" + (if (magRegistered) "OK" else "ОТКАЗ/НЕТ"))
+        sb.appendLine("Событий: шаг=" + stepEvents + " курс=" + rotEvents + " маг=" + magEvents)
         sb.appendLine("Меток: " + marks.size)
         synchronized(marks) {
             for (m in marks) {
