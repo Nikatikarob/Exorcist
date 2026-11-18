@@ -11,6 +11,7 @@ import android.graphics.Typeface
 import android.util.AttributeSet
 import android.view.View
 import com.exorcist.app.core.SonarFrame
+import kotlin.math.max
 import kotlin.math.min
 
 class SonarScopeView @JvmOverloads constructor(
