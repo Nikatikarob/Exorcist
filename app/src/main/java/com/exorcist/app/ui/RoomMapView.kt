@@ -117,10 +117,10 @@ class RoomMapView @JvmOverloads constructor(
                 minY = min(minY, p.second); maxY = max(maxY, p.second)
             }
             for (l in lns) {
-                minX = min(minX, l.x1); maxX = max(maxX, l.x2)
-                minY = min(minY, l.y1); maxY = max(maxY, l.y2)
-                minX = min(minX, l.x2); maxX = max(maxX, l.x1)
-                minY = min(minY, l.y2); maxY = max(maxY, l.y1)
+                minX = min(minX, l.x1); maxX = max(maxX, l.x1)
+                minX = min(minX, l.x2); maxX = max(maxX, l.x2)
+                minY = min(minY, l.y1); maxY = max(maxY, l.y1)
+                minY = min(minY, l.y2); maxY = max(maxY, l.y2)
             }
             for (c in cls) {
                 minX = min(minX, c.x); maxX = max(maxX, c.x)
@@ -202,7 +202,8 @@ class RoomMapView @JvmOverloads constructor(
             canvas.drawLine(mx, my, mx + 20f * d * sin(hr).toFloat(), my - 20f * d * cos(hr).toFloat(), headP)
 
             canvas.drawText("шагов " + e.steps + " · курс " + e.headingDeg.toInt() + "°", 8f * d, 16f * d, lbl)
-            canvas.drawText("клетка 1 м · синий контур · пунктир магнит · янтарь кластеры", 8f * d, h - 8f * d, txt)
+            canvas.drawText("клетка 1 м · синий контур · пунктир магнит", 8f * d, h - 20f * d, txt)
+            canvas.drawText("янтарь кластер · бирюза трек · точка ты", 8f * d, h - 8f * d, txt)
         } catch (ex: Exception) {
             ex.printStackTrace()
         }
