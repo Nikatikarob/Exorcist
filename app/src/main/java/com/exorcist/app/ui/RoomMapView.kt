@@ -95,7 +95,7 @@ class RoomMapView @JvmOverloads constructor(
             val pts = ArrayList<Pair<Float, Float>>()
             synchronized(e.path) { pts.addAll(e.path) }
             val mks = ArrayList<MapMark>()
-            synchronized(e.marks) { mks.addAll(mks@ mks) }
+            synchronized(e.marks) { mks.addAll(e.marks) }
             pts.add(Pair(e.posX, e.posY))
 
             val wp = e.wallPoly
@@ -104,15 +104,28 @@ class RoomMapView @JvmOverloads constructor(
 
             var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE
             var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
-            fun eat(x: Float, y: Float) {
-                minX = min(minX, x); maxX = max(maxX, x)
-                minY = min(minY, y); maxY = max(maxY, y)
+            for (p in pts) {
+                minX = min(minX, p.first); maxX = max(maxX, p.first)
+                minY = min(minY, p.second); maxY = max(maxY, p.second)
             }
-            for (p in pts) eat(p.first, p.second)
-            for (m in mks) eat(m.x, m.y)
-            if (wp != null) for (p in wp.pts) eat(p.first, p.second)
-            for (l in lns) { eat(l.x1, l.y1); eat(l.x2, l.y2) }
-            for (c in cls) eat(c.x, c.y)
+            for (m in mks) {
+                minX = min(minX, m.x); maxX = max(maxX, m.x)
+                minY = min(minY, m.y); maxY = max(maxY, m.y)
+            }
+            if (wp != null) for (p in wp.pts) {
+                minX = min(minX, p.first); maxX = max(maxX, p.first)
+                minY = min(minY, p.second); maxY = max(maxY, p.second)
+            }
+            for (l in lns) {
+                minX = min(minX, l.x1); maxX = max(maxX, l.x2)
+                minY = min(minY, l.y1); maxY = max(maxY, l.y2)
+                minX = min(minX, l.x2); maxX = max(maxX, l.x1)
+                minY = min(minY, l.y2); maxY = max(maxY, l.y1)
+            }
+            for (c in cls) {
+                minX = min(minX, c.x); maxX = max(maxX, c.x)
+                minY = min(minY, c.y); maxY = max(maxY, c.y)
+            }
             minX -= 1f; maxX += 1f; minY -= 1f; maxY += 1f
             val spanX = max(maxX - minX, 1.5f)
             val spanY = max(maxY - minY, 1.5f)
@@ -121,27 +134,24 @@ class RoomMapView @JvmOverloads constructor(
             val cx = (minX + maxX) / 2f
             val cy = (minY + maxY) / 2f
 
-            fun sx(x: Float) = w / 2f + (x - cx) * scale
-            fun sy(y: Float) = h / 2f - (y - cy) * scale
-
             var gx = kotlin.math.floor(minX).toInt()
             while (gx <= kotlin.math.ceil(maxX)) {
-                val x = sx(gx.toFloat())
+                val x = w / 2f + (gx - cx) * scale
                 canvas.drawLine(x, 0f, x, h, grid)
                 gx++
             }
             var gy = kotlin.math.floor(minY).toInt()
             while (gy <= kotlin.math.ceil(maxY)) {
-                val y = sy(gy.toFloat())
+                val y = h / 2f - (gy - cy) * scale
                 canvas.drawLine(0f, y, w, y, grid)
                 gy++
             }
 
-            // Контур стен
             if (wp != null && wp.pts.size >= 3) {
                 wallObj.reset()
                 for (i in wp.pts.indices) {
-                    val x = sx(wp.pts[i].first); val y = sy(wp.pts[i].second)
+                    val x = w / 2f + (wp.pts[i].first - cx) * scale
+                    val y = h / 2f - (wp.pts[i].second - cy) * scale
                     if (i == 0) wallObj.moveTo(x, y) else wallObj.lineTo(x, y)
                 }
                 wallObj.close()
@@ -149,30 +159,33 @@ class RoomMapView @JvmOverloads constructor(
                 canvas.drawPath(wallObj, wallStroke)
             }
 
-            // Магнитные прямые
             for (l in lns) {
-                canvas.drawLine(sx(l.x1), sy(l.y1), sx(l.x2), sy(l.y2), lineP)
+                canvas.drawLine(
+                    w / 2f + (l.x1 - cx) * scale, h / 2f - (l.y1 - cy) * scale,
+                    w / 2f + (l.x2 - cx) * scale, h / 2f - (l.y2 - cy) * scale, lineP
+                )
             }
 
-            // Кластеры
             for (c in cls) {
+                val x = w / 2f + (c.x - cx) * scale
+                val y = h / 2f - (c.y - cy) * scale
                 val r = max(0.35f * scale, 10f * d)
-                canvas.drawCircle(sx(c.x), sy(c.y), r, clusFill)
-                canvas.drawCircle(sx(c.x), sy(c.y), r, clusStroke)
-                canvas.drawText("×" + c.count, sx(c.x) + r + 3f * d, sy(c.y) + 4f * d, lbl)
+                canvas.drawCircle(x, y, r, clusFill)
+                canvas.drawCircle(x, y, r, clusStroke)
+                canvas.drawText("×" + c.count, x + r + 3f * d, y + 4f * d, lbl)
             }
 
-            // Трек
             pathObj.reset()
             for (i in pts.indices) {
-                val x = sx(pts[i].first); val y = sy(pts[i].second)
+                val x = w / 2f + (pts[i].first - cx) * scale
+                val y = h / 2f - (pts[i].second - cy) * scale
                 if (i == 0) pathObj.moveTo(x, y) else pathObj.lineTo(x, y)
             }
             canvas.drawPath(pathObj, trace)
 
-            // Метки
             for (m in mks) {
-                val x = sx(m.x); val y = sy(m.y)
+                val x = w / 2f + (m.x - cx) * scale
+                val y = h / 2f - (m.y - cy) * scale
                 if (m.kind == MapMark.MAG) {
                     val r = (5f + m.value * 1.0f).coerceAtMost(22f) * d
                     canvas.drawCircle(x, y, r, magP)
@@ -182,8 +195,8 @@ class RoomMapView @JvmOverloads constructor(
                 }
             }
 
-            // Текущая позиция
-            val mx = sx(e.posX); val my = sy(e.posY)
+            val mx = w / 2f + (e.posX - cx) * scale
+            val my = h / 2f - (e.posY - cy) * scale
             canvas.drawCircle(mx, my, 6f * d, meP)
             val hr = Math.toRadians(e.headingDeg.toDouble())
             canvas.drawLine(mx, my, mx + 20f * d * sin(hr).toFloat(), my - 20f * d * cos(hr).toFloat(), headP)
