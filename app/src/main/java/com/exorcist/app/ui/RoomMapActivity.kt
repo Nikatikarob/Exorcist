@@ -179,6 +179,19 @@ class RoomMapActivity : AppCompatActivity() {
         if (tone && !prevTone) pdr.noteTone((f?.peakHz ?: 0f) / 1000f)
         prevTone = tone
 
+        // Живой статус: как только пошли шаги, предупреждение гаснет
+        if (running && pdr.steps > 0) {
+            val wp = pdr.wallPoly
+            if (wp != null) {
+                b.tvStatus.text = "КОНТУР ГОТОВ · УГЛОВ " + wp.pts.size +
+                        (if (wp.closed) " · ЗАМКНУТ" else "")
+                b.tvStatus.setTextColor(Color.parseColor("#7CFF3D"))
+            } else {
+                b.tvStatus.text = pdr.outlineReason.ifEmpty { "ИДИ МЕДЛЕННО ВДОЛЬ СТЕН · ВЕРНИСЬ В СТАРТ" }
+                b.tvStatus.setTextColor(Color.parseColor("#FFB020"))
+            }
+        }
+
         b.tvSteps.text = "шаги " + pdr.steps
         b.tvHead.text = "курс " + pdr.headingDeg.toInt() + "°"
         b.tvMag.text = "маг " + String.format(Locale.US, "%+.1f", pdr.magDev)
