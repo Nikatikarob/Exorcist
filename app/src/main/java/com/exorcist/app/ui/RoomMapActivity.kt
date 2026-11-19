@@ -35,7 +35,7 @@ class RoomMapActivity : AppCompatActivity() {
     private var prevTone = false
     private var checkStepsJob: Job? = null
 
-    companion object { 
+    companion object {
         private const val REQ_AUDIO = 501
         private const val REQ_ACTIVITY = 502
     }
@@ -111,16 +111,12 @@ class RoomMapActivity : AppCompatActivity() {
         val ok = g.isNotEmpty() && g[0] == PackageManager.PERMISSION_GRANTED
         when (rc) {
             REQ_ACTIVITY -> {
-                if (ok) {
-                    Toast.makeText(this, "Разрешение получено. Нажми СТАРТ", Toast.LENGTH_LONG).show()
-                } else {
-                    Toast.makeText(this, "Без физической активности шаги считаться не будут", Toast.LENGTH_LONG).show()
-                }
+                if (ok) Toast.makeText(this, "Разрешение получено. Нажми СТАРТ", Toast.LENGTH_LONG).show()
+                else Toast.makeText(this, "Без физической активности шаги считаться не будут", Toast.LENGTH_LONG).show()
             }
             REQ_AUDIO -> {
                 if (ok) {
-                    if (hasActivityPerm()) startAll()
-                    else requestActivityPerm()
+                    if (hasActivityPerm()) startAll() else requestActivityPerm()
                 } else {
                     Toast.makeText(this, "Без микрофона не будет тоновых меток", Toast.LENGTH_LONG).show()
                 }
@@ -136,10 +132,9 @@ class RoomMapActivity : AppCompatActivity() {
         b.btnToggle.text = "СТОП"
         b.btnToggle.setTextColor(Color.parseColor("#FF3B30"))
         b.btnToggle.strokeColor = ColorStateList.valueOf(Color.parseColor("#FF3B30"))
-        b.tvStatus.text = "ИДИ МЕДЛЕННО · ТЕЛЕФОН ОДНИМ ХВАТОМ"
+        b.tvStatus.text = "ИДИ МЕДЛЕННО ВДОЛЬ СТЕН · ВЕРНИСЬ В СТАРТ"
         b.tvStatus.setTextColor(Color.parseColor("#7CFF3D"))
-        
-        // Проверка через 5 секунд: если шагов всё ещё 0, показать предупреждение
+
         checkStepsJob?.cancel()
         checkStepsJob = lifecycleScope.launch {
             delay(5000)
@@ -153,7 +148,7 @@ class RoomMapActivity : AppCompatActivity() {
                 }
             }
         }
-        
+
         tick?.cancel()
         tick = lifecycleScope.launch {
             while (isActive) {
@@ -180,6 +175,7 @@ class RoomMapActivity : AppCompatActivity() {
     private fun render() {
         val f = probe.latest
         val tone = f?.isTone == true
+        pdr.toneLocked = tone
         if (tone && !prevTone) pdr.noteTone((f?.peakHz ?: 0f) / 1000f)
         prevTone = tone
 
