@@ -33,7 +33,7 @@ class PdrEngine(context: Context) : SensorEventListener {
     private val gravSensor = sm.getDefaultSensor(Sensor.TYPE_GRAVITY)
     private val linSensor = sm.getDefaultSensor(Sensor.TYPE_LINEAR_ACCELERATION)
 
-    @Volatile var strideBaseM: Float = 0.65f
+    @Volatile var strideM: Float = 0.65f
     @Volatile var magThreshold: Float = 4f
     @Volatile var toneLocked: Boolean = false
     @Volatile var standoffM: Float = 0.45f
@@ -106,7 +106,7 @@ class PdrEngine(context: Context) : SensorEventListener {
         devSince = 0L; acSince = 0L
         lastMarkMag = 0L; lastMarkTone = 0L
         linMax = -1e9f; linMin = 1e9f
-        strideSum = 0f; strideN = 0; strideAvg = strideBaseM
+        strideSum = 0f; strideN = 0; strideAvg = strideM
         gripClass = 0; lastGrip = 0; gripChanges = 0
         acVar = 0f
         closureApplied = false; closureGapM = 0f
@@ -156,8 +156,7 @@ class PdrEngine(context: Context) : SensorEventListener {
     private fun updateRelative(v: FloatArray) {
         if (v.size < 4) return
         val h = projectHeading(v[0], v[1], v[2], v[3])
-        val diff = wrap(h - headingRad)
-        headingRad += 0.25f * diff
+        headingRad += 0.25f * wrap(h - headingRad)
         headingDeg = toDeg(headingRad)
         fusedHeadingDeg = toDeg(headingRad + geoOffsetRad)
     }
@@ -189,8 +188,7 @@ class PdrEngine(context: Context) : SensorEventListener {
         var stride = strideAvg
         val a = linMax - linMin
         if (a > 1f && linRegistered) {
-            val w = 0.40f * sqrt(sqrt(a))
-            stride = w.coerceIn(0.40f, 0.90f)
+            stride = (0.40f * sqrt(sqrt(a))).coerceIn(0.40f, 0.90f)
         }
         linMax = -1e9f
         linMin = 1e9f
@@ -273,12 +271,25 @@ class PdrEngine(context: Context) : SensorEventListener {
         return atan2(dx.toDouble(), dy.toDouble()).toFloat()
     }
 
+    private fun snapshotMarks(): ArrayList<MapMark> {
+        val out = ArrayList<MapMark>()
+        synchronized(marks) { out.addAll(marks) }
+        return out
+    }
+
+    private fun snapshotPath(): ArrayList<Pair<Float, Float>> {
+        val out = ArrayList<Pair<Float, Float>>()
+        synchronized(path) { out.addAll(path) }
+        return out
+    }
+
     private fun analyze() {
         try {
-            val raw = ArrayList<Pair<Float, Float>>()
-            synchronized(path) { raw.addAll(path) }
+            val raw = snapshotPath()
             if (raw.size < 8) {
                 wallPoly = null
+                magLines = emptyList()
+                clusters = emptyList()
                 return
             }
             val len = lengthOf(raw)
@@ -301,17 +312,17 @@ class PdrEngine(context: Context) : SensorEventListener {
                 closureApplied = true
             }
 
-            // Углы
             val corners = ArrayList<Int>()
             corners.add(0)
             var lastCorner = 0
             for (i in 2 until pts.size - 2) {
                 val a = dirOf(pts, i - 2, i) ?: continue
                 val b = dirOf(pts, i, i + 2) ?: continue
-                val d = abs(wrap(b - a))
-                if (d > 1.05f) {
+                if (abs(wrap(b - a)) > 1.05f) {
                     var dist = 0f
-                    for (k in lastCorner until i) dist += hypot(pts[k + 1].first - pts[k].first, pts[k + 1].second - pts[k].second)
+                    for (k in lastCorner until i) {
+                        dist += hypot(pts[k + 1].first - pts[k].first, pts[k + 1].second - pts[k].second)
+                    }
                     if (dist > 1.2f) {
                         corners.add(i)
                         lastCorner = i
@@ -327,17 +338,20 @@ class PdrEngine(context: Context) : SensorEventListener {
                     poly.add(p)
                 }
             }
+
+            val mks = snapshotMarks()
+            val magPts = ArrayList<Pair<Float, Float>>()
+            for (m in mks) if (m.kind == MapMark.MAG) magPts.add(Pair(m.x, m.y))
+            val lines = fitLines(magPts)
+
             if (poly.size < 3) {
                 wallPoly = null
             } else {
-                val mks = ArrayList<MapMark>()
-                synchronized(marks) { mks.addAll(mks@ mks) }
-                val lines = fitLines(mks.filter { it.kind == MapMark.MAG }.map { Pair(it.x, it.y) })
                 val off = offsetAndSnap(poly, standoffM, lines)
                 wallPoly = WallPoly(off, closureApplied)
-                magLines = lines
-                clusters = clusterRest(mks, lines)
             }
+            magLines = lines
+            clusters = clusterRest(mks, lines)
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -353,7 +367,7 @@ class PdrEngine(context: Context) : SensorEventListener {
         }
         val ccw = area > 0f
         val ex = FloatArray(n); val ey = FloatArray(n)
-        val ox = FloatArray(n); val oy = FloatArray(n)
+        val nx = FloatArray(n); val ny = FloatArray(n)
         val px = FloatArray(n); val py = FloatArray(n)
         for (i in 0 until n) {
             val a = poly[i]; val b = poly[(i + 1) % n]
@@ -361,9 +375,9 @@ class PdrEngine(context: Context) : SensorEventListener {
             val l = hypot(dx, dy)
             if (l < 1e-6f) { dx = 1f; dy = 0f } else { dx /= l; dy /= l }
             ex[i] = dx; ey[i] = dy
-            var nx = ey[i]; var ny = -ex[i]
-            if (!ccw) { nx = -nx; ny = -ny }
-            ox[i] = nx; oy[i] = ny
+            var ox = ey[i]; var oy = -ex[i]
+            if (!ccw) { ox = -ox; oy = -oy }
+            nx[i] = ox; ny[i] = oy
             var dd = d
             val mx = a.first + dx * l / 2f
             val my = a.second + dy * l / 2f
@@ -372,14 +386,16 @@ class PdrEngine(context: Context) : SensorEventListener {
                 val ul = hypot(ux, uy)
                 if (ul < 0.5f) continue
                 ux /= ul; uy /= ul
-                val ang = abs(wrap(atan2(ux.toDouble(), uy.toDouble()).toFloat() - atan2(dx.toDouble(), dy.toDouble()).toFloat()))
+                val angA = atan2(ux.toDouble(), uy.toDouble()).toFloat()
+                val angB = atan2(dx.toDouble(), dy.toDouble()).toFloat()
+                val ang = abs(wrap(angA - angB))
                 val parallel = ang < 0.35f || ang > Math.PI.toFloat() - 0.35f
                 if (!parallel) continue
-                val delta = (ln.x1 - mx) * nx + (ln.y1 - my) * ny
+                val delta = (ln.x1 - mx) * nx[i] + (ln.y1 - my) * ny[i]
                 if (delta > 0.05f && delta < 1.5f) { dd = delta; break }
             }
-            px[i] = a.first + nx * dd
-            py[i] = a.second + ny * dd
+            px[i] = a.first + nx[i] * dd
+            py[i] = a.second + ny[i] * dd
         }
         for (i in 0 until n) {
             val j = (i - 1 + n) % n
@@ -419,14 +435,17 @@ class PdrEngine(context: Context) : SensorEventListener {
                     val wx = p.first - a.first; val wy = p.second - a.second
                     if (abs(wx * uy - wy * ux) < 0.25f) inl.add(k)
                 }
-                if (inl.size >= 3 && (best == null || inl.size > best.size)) best = inl
+                val cur = best
+                if (inl.size >= 3 && (cur == null || inl.size > cur.size)) best = inl
             }
             val bs = best ?: return@repeat
-            var fi = 0; var fj = 0
+            var fi = bs[0]; var fj = bs[0]
             var md = -1f
-            for (x in bs.indices) for (y in x + 1 until bs.size) {
-                val dd = hypot(pool[bs[x]].first - pool[bs[y]].first, pool[bs[x]].second - pool[bs[y]].second)
-                if (dd > md) { md = dd; fi = bs[x]; fj = bs[y] }
+            for (x in bs.indices) {
+                for (y in x + 1 until bs.size) {
+                    val dd = hypot(pool[bs[x]].first - pool[bs[y]].first, pool[bs[x]].second - pool[bs[y]].second)
+                    if (dd > md) { md = dd; fi = bs[x]; fj = bs[y] }
+                }
             }
             if (md >= 1.0f) res.add(MagLine(pool[fi].first, pool[fi].second, pool[fj].first, pool[fj].second))
             val sorted = bs.sortedDescending()
@@ -446,8 +465,8 @@ class PdrEngine(context: Context) : SensorEventListener {
                 ux /= l; uy /= l
                 val wx = m.x - ln.x1; val wy = m.y - ln.y1
                 val t = (wx * ux + wy * uy).coerceIn(0f, l)
-                val px = ln.x1 + ux * t; val py = ln.y1 + uy * t
-                if (hypot(m.x - px, m.y - py) < 0.3f) { onLine = true; break }
+                val qx = ln.x1 + ux * t; val qy = ln.y1 + uy * t
+                if (hypot(m.x - qx, m.y - qy) < 0.3f) { onLine = true; break }
             }
             if (!onLine) rest.add(m)
         }
@@ -461,11 +480,11 @@ class PdrEngine(context: Context) : SensorEventListener {
             if (idx < 0) {
                 cx.add(m.x); cy.add(m.y); cn.add(1); cs.add(m.value)
             } else {
-                val n = cn[idx]
-                cx[idx] = (cx[idx] * n + m.x) / (n + 1)
-                cy[idx] = (cy[idx] * n + m.y) / (n + 1)
-                cs[idx] = (cs[idx] * n + m.value) / (n + 1)
-                cn[idx] = n + 1
+                val nn = cn[idx]
+                cx[idx] = (cx[idx] * nn + m.x) / (nn + 1)
+                cy[idx] = (cy[idx] * nn + m.y) / (nn + 1)
+                cs[idx] = (cs[idx] * nn + m.value) / (nn + 1)
+                cn[idx] = nn + 1
             }
         }
         val out = ArrayList<Cluster>()
@@ -486,7 +505,7 @@ class PdrEngine(context: Context) : SensorEventListener {
         return d
     }
 
-    fun pathLengthM(): Float = lengthOf(ArrayList(path))
+    fun pathLengthM(): Float = lengthOf(snapshotPath())
 
     fun report(): String {
         val sb = StringBuilder()
@@ -527,15 +546,14 @@ class PdrEngine(context: Context) : SensorEventListener {
                     " · меток " + c.count + " · сила " + String.format(java.util.Locale.US, "%.1f", c.strength))
         }
         sb.appendLine("Меток: " + marks.size)
-        synchronized(marks) {
-            for (m in marks) {
-                val kind = if (m.kind == MapMark.MAG) "МАГНИТ" else "ТОН   "
-                sb.appendLine("   " + kind + " x=" + String.format(java.util.Locale.US, "%.2f", m.x) +
-                        " y=" + String.format(java.util.Locale.US, "%.2f", m.y) +
-                        " · " + String.format(java.util.Locale.US, "%.1f", m.value) +
-                        (if (m.kind == MapMark.MAG) " мкТл" else " кГц") +
-                        " · уверенность " + m.conf + "/4")
-            }
+        val mks = snapshotMarks()
+        for (m in mks) {
+            val kind = if (m.kind == MapMark.MAG) "МАГНИТ" else "ТОН   "
+            sb.appendLine("   " + kind + " x=" + String.format(java.util.Locale.US, "%.2f", m.x) +
+                    " y=" + String.format(java.util.Locale.US, "%.2f", m.y) +
+                    " · " + String.format(java.util.Locale.US, "%.1f", m.value) +
+                    (if (m.kind == MapMark.MAG) " мкТл" else " кГц") +
+                    " · уверенность " + m.conf + "/4")
         }
         return sb.toString()
     }
