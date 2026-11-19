@@ -3,6 +3,7 @@ package com.exorcist.app.ui
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
@@ -24,6 +25,25 @@ class RoomMapView @JvmOverloads constructor(
 
     private val grid = Paint().apply {
         color = Color.parseColor("#1C2C38"); style = Paint.Style.STROKE; strokeWidth = 1f
+    }
+    private val wallFill = Paint().apply {
+        color = Color.parseColor("#142E7BFF"); style = Paint.Style.FILL
+    }
+    private val wallStroke = Paint().apply {
+        color = Color.parseColor("#2E7BFF"); style = Paint.Style.STROKE
+        strokeWidth = 2.6f * d; isAntiAlias = true
+    }
+    private val lineP = Paint().apply {
+        color = Color.parseColor("#FF2E88"); style = Paint.Style.STROKE
+        strokeWidth = 2f * d; isAntiAlias = true
+        pathEffect = DashPathEffect(floatArrayOf(8f * d, 6f * d), 0f)
+    }
+    private val clusFill = Paint().apply {
+        color = Color.parseColor("#28FFB020"); style = Paint.Style.FILL; isAntiAlias = true
+    }
+    private val clusStroke = Paint().apply {
+        color = Color.parseColor("#FFB020"); style = Paint.Style.STROKE
+        strokeWidth = 1.4f * d; isAntiAlias = true
     }
     private val trace = Paint().apply {
         color = Color.parseColor("#00E5C0"); style = Paint.Style.STROKE
@@ -53,6 +73,7 @@ class RoomMapView @JvmOverloads constructor(
         typeface = Typeface.MONOSPACE; isAntiAlias = true
     }
     private val pathObj = Path()
+    private val wallObj = Path()
 
     fun bind(e: PdrEngine) {
         engine = e
@@ -74,19 +95,24 @@ class RoomMapView @JvmOverloads constructor(
             val pts = ArrayList<Pair<Float, Float>>()
             synchronized(e.path) { pts.addAll(e.path) }
             val mks = ArrayList<MapMark>()
-            synchronized(e.marks) { mks.addAll(e.marks) }
+            synchronized(e.marks) { mks.addAll(mks@ mks) }
             pts.add(Pair(e.posX, e.posY))
+
+            val wp = e.wallPoly
+            val lns = e.magLines
+            val cls = e.clusters
 
             var minX = Float.MAX_VALUE; var maxX = -Float.MAX_VALUE
             var minY = Float.MAX_VALUE; var maxY = -Float.MAX_VALUE
-            for (p in pts) {
-                minX = min(minX, p.first); maxX = max(maxX, p.first)
-                minY = min(minY, p.second); maxY = max(maxY, p.second)
+            fun eat(x: Float, y: Float) {
+                minX = min(minX, x); maxX = max(maxX, x)
+                minY = min(minY, y); maxY = max(maxY, y)
             }
-            for (m in mks) {
-                minX = min(minX, m.x); maxX = max(maxX, m.x)
-                minY = min(minY, m.y); maxY = max(maxY, m.y)
-            }
+            for (p in pts) eat(p.first, p.second)
+            for (m in mks) eat(m.x, m.y)
+            if (wp != null) for (p in wp.pts) eat(p.first, p.second)
+            for (l in lns) { eat(l.x1, l.y1); eat(l.x2, l.y2) }
+            for (c in cls) eat(c.x, c.y)
             minX -= 1f; maxX += 1f; minY -= 1f; maxY += 1f
             val spanX = max(maxX - minX, 1.5f)
             val spanY = max(maxY - minY, 1.5f)
@@ -110,8 +136,33 @@ class RoomMapView @JvmOverloads constructor(
                 canvas.drawLine(0f, y, w, y, grid)
                 gy++
             }
-            canvas.drawText("клетка = 1 м", 8f * d, h - 8f * d, txt)
 
+            // Контур стен
+            if (wp != null && wp.pts.size >= 3) {
+                wallObj.reset()
+                for (i in wp.pts.indices) {
+                    val x = sx(wp.pts[i].first); val y = sy(wp.pts[i].second)
+                    if (i == 0) wallObj.moveTo(x, y) else wallObj.lineTo(x, y)
+                }
+                wallObj.close()
+                canvas.drawPath(wallObj, wallFill)
+                canvas.drawPath(wallObj, wallStroke)
+            }
+
+            // Магнитные прямые
+            for (l in lns) {
+                canvas.drawLine(sx(l.x1), sy(l.y1), sx(l.x2), sy(l.y2), lineP)
+            }
+
+            // Кластеры
+            for (c in cls) {
+                val r = max(0.35f * scale, 10f * d)
+                canvas.drawCircle(sx(c.x), sy(c.y), r, clusFill)
+                canvas.drawCircle(sx(c.x), sy(c.y), r, clusStroke)
+                canvas.drawText("×" + c.count, sx(c.x) + r + 3f * d, sy(c.y) + 4f * d, lbl)
+            }
+
+            // Трек
             pathObj.reset()
             for (i in pts.indices) {
                 val x = sx(pts[i].first); val y = sy(pts[i].second)
@@ -119,25 +170,26 @@ class RoomMapView @JvmOverloads constructor(
             }
             canvas.drawPath(pathObj, trace)
 
+            // Метки
             for (m in mks) {
                 val x = sx(m.x); val y = sy(m.y)
                 if (m.kind == MapMark.MAG) {
-                    val r = (6f + m.value * 1.2f).coerceAtMost(26f) * d
+                    val r = (5f + m.value * 1.0f).coerceAtMost(22f) * d
                     canvas.drawCircle(x, y, r, magP)
-                    canvas.drawCircle(x, y, r * 0.45f, magP)
                 } else {
-                    val r = 9f * d
-                    canvas.drawCircle(x, y, r, toneP)
-                    canvas.drawText(String.format(java.util.Locale.US, "%.1f", m.value), x + r + 3f * d, y + 4f * d, lbl)
+                    canvas.drawCircle(x, y, 9f * d, toneP)
+                    canvas.drawText(String.format(java.util.Locale.US, "%.1f", m.value), x + 11f * d, y + 4f * d, lbl)
                 }
             }
 
+            // Текущая позиция
             val mx = sx(e.posX); val my = sy(e.posY)
             canvas.drawCircle(mx, my, 6f * d, meP)
             val hr = Math.toRadians(e.headingDeg.toDouble())
             canvas.drawLine(mx, my, mx + 20f * d * sin(hr).toFloat(), my - 20f * d * cos(hr).toFloat(), headP)
 
             canvas.drawText("шагов " + e.steps + " · курс " + e.headingDeg.toInt() + "°", 8f * d, 16f * d, lbl)
+            canvas.drawText("клетка 1 м · синий контур · пунктир магнит · янтарь кластеры", 8f * d, h - 8f * d, txt)
         } catch (ex: Exception) {
             ex.printStackTrace()
         }
