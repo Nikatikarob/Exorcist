@@ -48,6 +48,8 @@ class PdrEngine(context: Context) : SensorEventListener {
         private set
     var closureGapM = 0f
         private set
+    var outlineReason = ""
+        private set
 
     var posX = 0f
         private set
@@ -109,7 +111,7 @@ class PdrEngine(context: Context) : SensorEventListener {
         strideSum = 0f; strideN = 0; strideAvg = strideM
         gripClass = 0; lastGrip = 0; gripChanges = 0
         acVar = 0f
-        closureApplied = false; closureGapM = 0f
+        closureApplied = false; closureGapM = 0f; outlineReason = ""
         wallPoly = null; magLines = emptyList(); clusters = emptyList()
         stepEvents = 0; rotEvents = 0; geoEvents = 0; magEvents = 0
         synchronized(path) { path.clear(); path.add(Pair(0f, 0f)) }
@@ -157,6 +159,7 @@ class PdrEngine(context: Context) : SensorEventListener {
         if (v.size < 4) return
         val h = projectHeading(v[0], v[1], v[2], v[3])
         headingRad += 0.25f * wrap(h - headingRad)
+        headingRad = wrap(headingRad)
         headingDeg = toDeg(headingRad)
         fusedHeadingDeg = toDeg(headingRad + geoOffsetRad)
     }
@@ -290,6 +293,7 @@ class PdrEngine(context: Context) : SensorEventListener {
                 wallPoly = null
                 magLines = emptyList()
                 clusters = emptyList()
+                outlineReason = "КОНТУР: МАЛО ШАГОВ · ИДИ ВДОЛЬ СТЕН"
                 return
             }
             val len = lengthOf(raw)
@@ -310,6 +314,14 @@ class PdrEngine(context: Context) : SensorEventListener {
                     pts.add(Pair(raw[i].first - cvx * t, raw[i].second - cvy * t))
                 }
                 closureApplied = true
+            }
+
+            // Ворота контура: только замкнутый обход или длинный путь
+            val canOutline = closureApplied || len >= 15f
+            if (!canOutline) {
+                wallPoly = null
+                outlineReason = "КОНТУР: ВЕРНИСЬ В СТАРТ ИЛИ ПРОЙДИ >=15 М · НЕВЯЗКА " +
+                        String.format(java.util.Locale.US, "%.1f", gap) + " М"
             }
 
             val corners = ArrayList<Int>()
@@ -344,11 +356,13 @@ class PdrEngine(context: Context) : SensorEventListener {
             for (m in mks) if (m.kind == MapMark.MAG) magPts.add(Pair(m.x, m.y))
             val lines = fitLines(magPts)
 
-            if (poly.size < 3) {
+            if (poly.size < 3 || !canOutline) {
+                if (canOutline && poly.size < 3) outlineReason = "КОНТУР: МАЛО УГЛОВ · ИДИ РОВНЕЕ ВДОЛЬ СТЕН"
                 wallPoly = null
             } else {
                 val off = offsetAndSnap(poly, standoffM, lines)
                 wallPoly = WallPoly(off, closureApplied)
+                outlineReason = ""
             }
             magLines = lines
             clusters = clusterRest(mks, lines)
@@ -501,7 +515,8 @@ class PdrEngine(context: Context) : SensorEventListener {
 
     private fun toDeg(rad: Float): Float {
         var d = Math.toDegrees(rad.toDouble()).toFloat()
-        if (d < 0f) d += 360f
+        while (d < 0f) d += 360f
+        while (d >= 360f) d -= 360f
         return d
     }
 
@@ -516,14 +531,16 @@ class PdrEngine(context: Context) : SensorEventListener {
         sb.appendLine("Регистрация: шаг=" + ok(stepRegistered) + " курс=" + ok(rotRegistered) +
                 " гео=" + ok(geoRegistered) + " маг=" + ok(magRegistered) +
                 " хват=" + ok(gravRegistered) + " лин=" + ok(linRegistered))
+        sb.appendLine("Событий: шаг=" + stepEvents + " курс=" + rotEvents + " гео=" + geoEvents + " маг=" + magEvents)
         sb.appendLine("Курс: относит " + headingDeg.toInt() + "° · абсолют " + fusedHeadingDeg.toInt() + "°")
         sb.appendLine("Хват: " + gripName(gripClass) + " · смен: " + gripChanges +
                 " · AC-вариация: " + String.format(java.util.Locale.US, "%.3f", acVar))
         sb.appendLine("Замыкание: " + (if (closureApplied) "ПРИМЕНЕНО" else "нет") +
                 " · невязка " + String.format(java.util.Locale.US, "%.2f", closureGapM) + " м")
+        if (outlineReason.isNotEmpty()) sb.appendLine(outlineReason)
         val wp = wallPoly
         if (wp == null) {
-            sb.appendLine("Контур: не построено (мало углов или шагов)")
+            sb.appendLine("Контур: не построено")
         } else {
             sb.appendLine("Контур стен: " + wp.pts.size + " угла, вынос " +
                     String.format(java.util.Locale.US, "%.2f", standoffM) + " м")
